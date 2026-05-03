@@ -1,89 +1,89 @@
-# 📘 Space Engineers Airlock System — Script Documentation
+# Space Engineers Airlock System - Script Documentation
 
-Ce script pour le bloc programmable de *Space Engineers* implémente un **système de SAS intelligent**, capable de gérer le cyclage automatique de l'air, la détection de fuites et le confinement automatique des zones compromises.
-
----
-
-## 📂 Table des Matières
-
-* [Initialisation et Configuration](https://www.google.com/search?q=%23-initialisation-et-configuration)
-* [Système de Cyclage](https://www.google.com/search?q=%23-syst%C3%A8me-de-cyclage)
-* [Protocoles d'Urgence et Confinement](https://www.google.com/search?q=%23-protocoles-durgence-et-confinement)
-* [Interface LCD et Signaux](https://www.google.com/search?q=%23-interface-lcd-et-signaux)
-* [Commandes Terminal](https://www.google.com/search?q=%23-commandes-terminal)
+This *Space Engineers* programmable block script implements an **intelligent airlock system** that can manage automatic air cycling, leak detection, and automatic containment of compromised areas.
 
 ---
 
-## 🚀 Initialisation et Configuration
+## Table of Contents
 
-Le système s'initialise en scannant les groupes de blocs définis dans les constantes du script. Il utilise un système de tags pour différencier plusieurs SAS sur une même grille.
+* [Initialization and Configuration](#initialization-and-configuration)
+* [Cycling System](#cycling-system)
+* [Emergency and Containment Protocols](#emergency-and-containment-protocols)
+* [Terminal Commands](#terminal-commands)
+* [LCD Display Logic](#lcd-display-logic)
 
-### **Groupes de blocs requis**
-| Nom du Groupe | Description |
+---
+
+## Initialization and Configuration
+
+The system initializes by scanning the block groups defined in the script constants. It uses tags to distinguish multiple airlocks on the same grid.
+
+### **Required Block Groups**
+| Group Name | Description |
 | --- | --- |
-| `AIRLOCK_VENTS` | Évent de ventilation pour le cyclage. |
-| `AIRLOCK_DOORS_IN` | Portes menant à l'intérieur de la base. |
-| `AIRLOCK_DOORS_OUT` | Portes menant à l'extérieur ou au hangar. |
-| `AIRLOCK_LCD` | Écrans d'affichage du statut local. |
-| `AIRLOCK_LEDS` | Lumières locales du SAS : état, cyclage, sécurité et urgence. |
-| `AIRLOCK_SOUND` | Sound blocks du SAS : cycle normal et repli sonore si `AIRLOCK_ALARM` est absent. |
-| `AIRLOCK_SAS_PROBE` | Évents sondes du SAS pour mesurer l'O2 sans piloter le cyclage. |
-| `AIRLOCK_ALARM` | Sound blocks d'alarme globale / secure, prioritaire si le groupe existe. |
-| `AIRLOCK_EMERGENCY_LEDS` | Lumières d'alerte globale et mode secure. |
-| `AUTOCLOSE_DOORS` | Portes surveillées par l'auto-close global. |
-| `VENTS_OVERVIEW_LCD` | LCD overview global des SAS et pièces surveillées. |
+| `AIRLOCK_VENTS` | Air vents used for airlock cycling. |
+| `AIRLOCK_DOORS_IN` | Doors leading to the base interior. |
+| `AIRLOCK_DOORS_OUT` | Doors leading outside or to a hangar. |
+| `AIRLOCK_LCD` | Local status display panels. |
+| `AIRLOCK_LEDS` | Local airlock lights for state, cycling, secure mode, and emergencies. |
+| `AIRLOCK_SOUND` | Airlock sound blocks: normal cycle sound and fallback if `AIRLOCK_ALARM` is missing. |
+| `AIRLOCK_SAS_PROBE` | Airlock probe vents used to read O2 without driving the cycling logic. |
+| `AIRLOCK_ALARM` | Global / secure alarm sound blocks, used first when the group exists. |
+| `AIRLOCK_EMERGENCY_LEDS` | Global emergency and secure mode lights. |
+| `AUTOCLOSE_DOORS` | Doors monitored by the global auto-close system. |
+| `VENTS_OVERVIEW_LCD` | Global overview LCD for airlocks and monitored rooms. |
 
-* **Tagging :** Utilisez le format `[SAS:NomDuSas]` dans le nom des blocs pour les assigner à un SAS spécifique.
-* **Sondes :** Le tag `[PROBE]` sur un évent permet une lecture précise de l'O2 sans affecter la pressurisation.
-* **Sons :** Les sound blocks n'ont pas besoin d'être configurés à la main ; le script force le son et la durée de boucle selon l'état courant.
-
----
-
-## 🔫 Système de Cyclage
-
-Le script automatise la transition entre les environnements pressurisés et dépressurisés.
-
-### **Logique de fonctionnement**
-1.  **Vérification :** S'assure qu'aucune porte n'est ouverte avant de commencer.
-2.  **Interlock :** Verrouille les portes opposées pendant le cycle pour éviter toute décompression accidentelle.
-3.  **Égalisation :** Active les évents jusqu'à atteindre les seuils configurés (`0.95f` pour pressurisé, `0.05f` pour dépressurisé).
+* **Tagging:** Use the `[SAS:AirlockName]` format in block names to assign blocks to a specific airlock.
+* **Probes:** The `[PROBE]` tag on a vent allows accurate O2 readings without affecting pressurization.
+* **Sounds:** Sound blocks do not need to be configured manually; the script forces the sound and loop duration based on the current state.
 
 ---
 
-## 🚨 Protocoles d'Urgence et Confinement
+## Cycling System
 
-Le cœur sécuritaire du système repose sur la surveillance constante des secteurs.
+The script automates transitions between pressurized and depressurized environments.
 
-* **Détection de Fuite :** Si le niveau d'O2 chute anormalement (seuil par défaut `20%`), le secteur passe en mode confinement.
-* **Confinement (Containment) :** Verrouille les portes du secteur, coupe la ventilation non essentielle et active les alarmes visuelles (LED rouges clignotantes).
-* **Mode Secure :** Une commande globale qui verrouille tous les SAS de la grille, idéal pour les situations de combat ou d'alerte intrusion. Le son `Drone Large` est forcé avec une boucle de `2s` sur `AIRLOCK_ALARM`, ou sur `AIRLOCK_SOUND` si aucun groupe d'alarme n'est disponible.
+### **Operating Logic**
+1.  **Check:** Ensures that no door is open before starting.
+2.  **Interlock:** Locks the opposite doors during the cycle to prevent accidental decompression.
+3.  **Equalization:** Runs the vents until the configured thresholds are reached (`0.95f` for pressurized, `0.05f` for depressurized).
 
 ---
 
-## ⚙️ Commandes Terminal
+## Emergency and Containment Protocols
 
-Le script accepte diverses commandes via l'argument du bloc programmable :
+The safety core of the system relies on constant area monitoring.
 
-| Commande | Action |
+* **Leak Detection:** If the O2 level drops abnormally (default threshold: `20%`), the area enters containment mode.
+* **Containment:** Locks the area's doors, shuts down non-essential ventilation, and activates visual alarms (blinking red LEDs).
+* **Secure Mode:** A global command that locks all airlocks on the grid, useful for combat or intrusion alerts. The `Drone Large` sound is forced with a `2s` loop on `AIRLOCK_ALARM`, or on `AIRLOCK_SOUND` if no alarm group is available.
+
+---
+
+## Terminal Commands
+
+The script accepts commands through the programmable block argument:
+
+| Command | Action |
 | --- | --- |
-| `pressu` | Lance le cycle de pressurisation du SAS par défaut. |
-| `depressu` | Lance le cycle de dépressurisation. |
-| `secure` | Bascule l'état de sécurité globale (ON/OFF). |
-| `contain <nom>` | Active ou désactive manuellement le confinement d'une pièce. |
-| `urgence` | Déclenche immédiatement une alerte manuelle sur le SAS. |
+| `pressu` | Starts the default airlock pressurization cycle. |
+| `depressu` | Starts the depressurization cycle. |
+| `secure` | Toggles the global secure state (ON/OFF). |
+| `contain <name>` | Manually enables or disables containment for a room. |
+| `urgence` | Immediately triggers a manual emergency on the airlock. |
 
 ---
 
-## 🚪 Logique d'Affichage (LCD)
+## LCD Display Logic
 
-L'interface LCD fournit un retour visuel complet :
-* **Statut O2 :** Affichage en pourcentage de l'oxygène interne.
-* **État des portes :** Indique si les portes INT ou EXT sont verrouillées ou ouvertes.
-* **Alertes :** Affiche la cause exacte d'une urgence (Fuite O2, Porte endommagée, Manuel).
+The LCD interface provides complete visual feedback:
+* **O2 Status:** Displays internal oxygen as a percentage.
+* **Door State:** Shows whether the INT or EXT doors are locked or open.
+* **Alerts:** Shows the exact emergency cause (O2 leak, damaged door, manual).
 
 ---
 
-## 📄 License & Author
+## License & Author
 
 Provided by **soraanoir/sundae https://github.com/soraanoir**.  
 Free to use and modify, provided that credit is given to the author.
