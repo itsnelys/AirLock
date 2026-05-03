@@ -1,3 +1,22 @@
+// =============================================================================
+// SPACE ENGINEERS - AIRLOCK / SAS CONTROLLER
+// =============================================================================
+// Rôle du script :
+//   - Gérer un ou plusieurs SAS grâce aux tags [SAS:...].
+//   - Cycler automatiquement l'air entre intérieur pressurisé et extérieur.
+//   - Verrouiller les portes opposées pour éviter les erreurs de manipulation.
+//   - Détecter les fuites O2 et isoler automatiquement les pièces compromises.
+//   - Piloter les LCD, lumières et alarmes de façon cohérente.
+//
+// Convention importante :
+//   Les noms des groupes ci-dessous sont l'interface entre le script et le monde.
+//   Si un bloc ne réagit pas, vérifier d'abord son groupe, son tag [SAS:..] ou
+//   son tag [ROOM:..].
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Groupes de blocs - SAS local
+// -----------------------------------------------------------------------------
 const string VENTS_GROUP        = "AIRLOCK_VENTS";
 const string DOORS_IN_GROUP     = "AIRLOCK_DOORS_IN";
 const string DOORS_OUT_GROUP    = "AIRLOCK_DOORS_OUT";
@@ -6,15 +25,24 @@ const string LEDS_GROUP         = "AIRLOCK_LEDS";
 const string SOUND_NORMAL_GROUP = "AIRLOCK_SOUND";
 const string PROBE_VENTS_GROUP  = "AIRLOCK_SAS_PROBE";
 
+// -----------------------------------------------------------------------------
+// Groupes globaux - alarmes, overview et portes auto-close
+// -----------------------------------------------------------------------------
 const string EMERGENCY_LEDS_GROUP  = "AIRLOCK_EMERGENCY_LEDS";
 const string SOUND_ALARM_GROUP     = "AIRLOCK_ALARM";
 const string AUTOCLOSE_DOORS_GROUP = "AUTOCLOSE_DOORS";
 const string OVERVIEW_LCD_GROUP    = "VENTS_OVERVIEW_LCD";
 
+// -----------------------------------------------------------------------------
+// Options globales
+// -----------------------------------------------------------------------------
 const bool SECURE_USES_GLOBAL_LEDS  = true;
 const bool SECURE_USES_GLOBAL_ALARM = true;
 const bool LIMIT_TO_CONSTRUCT       = true;
 
+// -----------------------------------------------------------------------------
+// État global sécurité / urgence
+// -----------------------------------------------------------------------------
 bool globalSecure = false;
 
 bool SameConstruct(IMyTerminalBlock b) {
@@ -26,6 +54,7 @@ Dictionary<long, bool> secureVentsBackup = new Dictionary<long, bool>();
 Dictionary<long, float> emergencyBaseIntensity = new Dictionary<long, float>();
 bool secureApplied = false;
 
+// Normalise les écritures du type "SAS1", "SAS_1" ou "SAS:01" vers "SAS 01".
 string NormalizeSasName(string s) {
   if (string.IsNullOrWhiteSpace(s)) return null;
   s = s.Trim().Replace(':',' ').Replace('_',' ').Replace('-', ' ');
@@ -51,6 +80,7 @@ string NormalizeSasName(string s) {
 const string SAS_TAG_PREFIX = "[SAS:";
 string SAS_NAME = "SAS 01";
 
+// Lit le tag [SAS:...] présent dans le nom d'un bloc.
 string ExtractSasTag(string name) {
   if (string.IsNullOrEmpty(name)) return null;
   int i = name.IndexOf(SAS_TAG_PREFIX, StringComparison.OrdinalIgnoreCase);
@@ -83,6 +113,8 @@ bool MatchesSas(IMyTerminalBlock b) {
 
 string _sasNameBackup = null;
 
+// Exécute une action dans le contexte d'un SAS précis.
+// Le script recharge les listes de blocs après changement de contexte.
 void WithSas(string sas, Action body) {
   _sasNameBackup = SAS_NAME;
   if (!string.IsNullOrEmpty(sas)) SAS_NAME = NormalizeSasName(sas);
@@ -91,6 +123,9 @@ void WithSas(string sas, Action body) {
   finally { SAS_NAME = _sasNameBackup ?? SAS_NAME; _sasNameBackup = null; }
 }
 
+// -----------------------------------------------------------------------------
+// Configuration des pièces et du confinement
+// -----------------------------------------------------------------------------
 const string CONTAIN_GROUP_PREFIX = "CONTAIN_";
 const string ROOM_LCD_GROUP       = "ROOM_STATUS_LCD";
 const string ROOM_TAG_PREFIX      = "[ROOM:";
@@ -110,6 +145,9 @@ const float ROOM_TEST_TRIGGER = 0.20f;
 
 const double MANUAL_CONTAIN_PROTO_SECONDS = 10.0;
 
+// -----------------------------------------------------------------------------
+// Seuils SAS et temporisations
+// -----------------------------------------------------------------------------
 const float O2_PRESSURIZED      = 0.95f;
 const float O2_DEPRESSURIZED    = 0.05f;
 const float LEAK_O2_THRESHOLD   = 0.20f;
@@ -123,10 +161,10 @@ const double EMERG_P2_SECONDS    = 5.0;
 const bool RESTORE_AFTER_EMERG   = true;
 bool emergMidChecked = false;
 
-const string SOUND_PRESSURE_CYCLE = "Alert 3"; 
-const string SOUND_GLOBAL_ALARM   = "Alert 2"; 
-const string SOUND_LOCAL_ALARM    = "Alert 1"; 
-const string SOUND_SECURE_ALARM   = "Drone Large";
+const string SOUND_PRESSURE_CYCLE = "Alert 3";  // Pressurisation / dépressurisation normale
+const string SOUND_GLOBAL_ALARM   = "Alert 2";  // Urgence globale / mode sécurité
+const string SOUND_LOCAL_ALARM    = "Alert 1";  // Urgence locale du SAS courant
+const string SOUND_SECURE_ALARM   = "Drone Large"; // Mode securite : Drone Large
 const string DEFAULT_ROOM_ALERT_SOUND = "Alert 1";
 const float NORMAL_LOOP_PERIOD    = 1.0f;
 const double NORMAL_KICK_PERIOD   = 1.0;
@@ -135,6 +173,8 @@ const double ALARM_KICK_PERIOD    = 1.0;
 const float SECURE_LOOP_PERIOD    = 2.0f;
 const double SECURE_KICK_PERIOD   = 2.0;
 
+// État persistant d'un SAS. Chaque SAS garde son cycle, sa cible O2,
+// ses sons, ses portes ouvertes et les backups nécessaires aux restaurations.
 class SasState {
   public Mode mode = Mode.Idle;
   public double modeStart = 0;
@@ -155,6 +195,7 @@ class SasState {
 
 Dictionary<string, SasState> sasStates = new Dictionary<string, SasState>(System.StringComparer.OrdinalIgnoreCase);
 
+// Récupère l'état mémorisé d'un SAS, ou le crée au premier passage.
 SasState GetState(string sas) {
   SasState st;
   if (!sasStates.TryGetValue(sas, out st)) { st = new SasState(); sasStates[sas] = st; }
@@ -164,6 +205,11 @@ SasState GetState(string sas) {
 bool globalAlarmOn = false;
 double globalAlarmLastKick = -9999;
 
+// -----------------------------------------------------------------------------
+// Cache des blocs trouvés sur la grille
+// -----------------------------------------------------------------------------
+// Ces listes sont reconstruites par CollectBlocks(). Elles évitent de scanner
+// toute la grille à chaque opération interne.
 IMyGridTerminalSystem GTS;
 List<IMyAirVent> vents = new List<IMyAirVent>();
 List<IMyAirVent> probeVents = new List<IMyAirVent>();
@@ -196,6 +242,8 @@ Dictionary<string, bool> manualDesired = new Dictionary<string, bool>(System.Str
 
 Dictionary<string, List<IMySoundBlock>> containSounds = new Dictionary<string, List<IMySoundBlock>>(System.StringComparer.OrdinalIgnoreCase);
 
+// Index globaux des pièces : les tags [ROOM:...] servent à lier sondes,
+// lumières, LCD et évents sans dépendre d'un seul groupe de blocs.
 List<IMyAirVent> allVents = new List<IMyAirVent>();
 List<IMyLightingBlock> roomLights = new List<IMyLightingBlock>();
 Dictionary<string, List<IMyAirVent>> roomToVents = new Dictionary<string, List<IMyAirVent>>();
@@ -227,6 +275,7 @@ EnvTarget envTarget = EnvTarget.Unknown;
 enum EmergencyCause { None, Manual, O2Leak, DoorDamage }
 EmergencyCause emergencyCause = EmergencyCause.None;
 
+// État actif du SAS actuellement chargé dans SAS_NAME.
 Dictionary<long,double> openSince = new Dictionary<long,double>();
 IMyDoor activeDoor = null;
 
@@ -240,6 +289,8 @@ double _now = 0;
 double Now { get { return _now; } }
 double Elapsed(double t0) { return Now - t0; }
 
+// Horloge interne robuste : Space Engineers peut parfois fournir un delta nul
+// ou invalide après chargement, recompilation ou changement de fréquence.
 void AdvanceClock(UpdateType src)
 {
   double dt = Runtime.TimeSinceLastRun.TotalSeconds;
@@ -255,11 +306,13 @@ void AdvanceClock(UpdateType src)
 
 const string STORAGE_VERSION = "SAS-PERSIST-V1";
 
+// Helpers de sérialisation compacts pour Storage.
 string F64(double v){ return v.ToString("R", System.Globalization.CultureInfo.InvariantCulture); }
 string F32(float  v){ return v.ToString("R", System.Globalization.CultureInfo.InvariantCulture); }
 bool PD(string s, out double v){ return double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v); }
 bool PF(string s, out float  v){ return float .TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out v); }
 
+// Échappe les séparateurs utilisés dans Storage.
 string Escape(string s){
     if (s == null) return "";
     return s.Replace("\\","\\\\").Replace("|","\\p").Replace(";", "\\s").Replace(":", "\\c").Replace(",", "\\k");
@@ -544,13 +597,13 @@ void DeserializeAll(string data){
 public Program() {
     GTS = GridTerminalSystem;
 
-  
+    // Recharge l'état sauvegardé entre deux exécutions du bloc programmable.
     if (!string.IsNullOrEmpty(Storage)) {
         try { DeserializeAll(Storage); } catch {}
     }
 
-  
-  
+    // Le bloc programmable peut lui-même porter un tag [SAS:...].
+    // Cela définit le SAS par défaut pour les commandes sans cible explicite.
     var meTag = ExtractSasTag(Me.CustomName);
     if (!string.IsNullOrEmpty(meTag)) SAS_NAME = meTag;
     SAS_NAME = NormalizeSasName(SAS_NAME);
@@ -564,6 +617,9 @@ public void Save() {
     catch { Storage = ""; }
 }
 
+// Point d'entrée appelé par Space Engineers.
+// Les commandes directes ciblent un SAS, puis la boucle normale maintient
+// tous les SAS découverts afin que les alarmes et LCD restent synchronisés.
 public void Main(string argument, UpdateType updateSource)
 {
   AdvanceClock(updateSource);
@@ -577,7 +633,7 @@ public void Main(string argument, UpdateType updateSource)
   string __src; EmergencyCause __cause;
   bool anyEmergNow = ComputeGlobalEmergency(out __src, out __cause);
 
-
+  // Commandes globales : mode sécurité / confinement total.
   if (arg == "secure on" || arg == "securite on" || arg == "confinement on") {
     globalSecure = true;
     ActivateSecure();
@@ -602,7 +658,7 @@ public void Main(string argument, UpdateType updateSource)
     Save();
   }
 
-
+  // Commandes actives : cyclage, urgence, scan et confinement manuel.
   if (!string.IsNullOrEmpty(rawArg) &&
       (arg.StartsWith("pressu") || arg.StartsWith("depressu") ||
        arg.StartsWith("emergency") || arg.StartsWith("urgence") ||
@@ -674,7 +730,7 @@ public void Main(string argument, UpdateType updateSource)
     }
   }
 
-
+  // Entretien périodique de tous les SAS connus.
   var all = DiscoverAllSasNames();
   foreach (var sas in all)
   {
@@ -703,6 +759,9 @@ public void Main(string argument, UpdateType updateSource)
   UpdateGlobalEmergencySignals();
 }
 
+// Reconstruit les caches de blocs pour le SAS courant et les éléments globaux.
+// C'est volontairement centralisé : toute logique qui dépend des blocs part de
+// ces listes plutôt que de rescanner la grille à la volée.
 void CollectBlocks()
 {
   vents.Clear(); probeVents.Clear(); doorsIN.Clear(); doorsOUT.Clear(); doorsAuto.Clear();
@@ -798,7 +857,7 @@ void CollectBlocks()
     for (int i = 0; i < tmp.Count; i++) { var l = tmp[i] as IMyLightingBlock; if (l != null) ledsEmergency.Add(l); }
   }
 
-
+  // Mémorise l'intensité utilisateur des LED d'urgence pour pouvoir la restaurer.
   for (int i = 0; i < ledsEmergency.Count; i++) {
     var l = ledsEmergency[i];
     if (l == null) continue;
@@ -891,6 +950,8 @@ void CollectBlocks()
   }
 }
 
+// Construit les index CONTAIN_<ROOM> :
+// chaque groupe de confinement peut contenir portes, évents, lumières et sons.
 void BuildContainIndexes(){
   containVents.Clear();
   containDoors.Clear();
@@ -938,6 +999,7 @@ void BuildContainIndexes(){
   }
 }
 
+// Applique les demandes manuelles différées après la temporisation de protocole.
 void ProcessManualPendingContain(){
   if (manualContainApplyAt.Count == 0) return;
 
@@ -969,10 +1031,12 @@ string ExtractRoomTag(string name){
   return string.IsNullOrEmpty(rm) ? null : rm;
 }
 
+// Helpers de filtrage pour les sondes, les pièces et les états critiques.
 bool IsProbe(IMyAirVent v){ return IsProbeGlobal(v); }
 string NormalizeKey(string s){ return (s??"").Trim().ToUpperInvariant(); }
 bool IsEmergencyActive(){ return mode==Mode.EmergencyPhase1 || mode==Mode.EmergencyPhase2; }
 
+// Un évent ne doit pas être manipulé par le SAS si sa pièce est confinée.
 bool VentIsContained(IMyAirVent v){
   if (v == null) return false;
 
@@ -999,6 +1063,7 @@ bool VentIsContained(IMyAirVent v){
 
 bool RoomIsContained(string room){ return containActive.Contains(NormalizeKey(room)); }
 
+// Extrait le nom de pièce depuis les commandes "contain <room>" ou "contain_<room>".
 string ParseContainKey(string raw){
   if (string.IsNullOrEmpty(raw)) return null; raw = raw.Trim();
   int sp = raw.IndexOf(' '); if (sp>=0) return NormalizeKey(raw.Substring(sp+1));
@@ -1047,6 +1112,7 @@ void EndRoomPressuTest(string room, float probeO2){
   }
 }
 
+// Prépare un cycle : portes fermées, interlocks prêts, puis attente de fermeture.
 void BeginPreLock(bool toPressurize){
   SetEnabled(doorsIN,true); SetEnabled(doorsOUT,true);
   CloseAllDoors();
@@ -1055,6 +1121,8 @@ void BeginPreLock(bool toPressurize){
   mode = toPressurize ? Mode.PreLockPressurize : Mode.PreLockDepressurize;
 }
 
+// Applique les verrouillages de sécurité en fonction du mode courant.
+// Cette fonction est le garde-fou principal contre les doubles ouvertures.
 void MaintainInterlocks(){
   {
     if (globalSecure){
@@ -1153,6 +1221,9 @@ void MaintainInterlocks(){
   else if (envTarget == EnvTarget.Depressurized) SetEnabled(doorsIN,  false);
 }
 
+// Démarre une urgence locale :
+//   phase 1 : sécurisation générale, ventilation coupée
+//   phase 2 : fermeture/verrouillage, puis restauration si configurée
 void BeginEmergency(EmergencyCause cause){
   emergencyCause = cause;
 
@@ -1175,6 +1246,8 @@ void BeginEmergency(EmergencyCause cause){
   mode = Mode.EmergencyPhase1;
 }
 
+// Machine d'état du SAS : elle fait avancer les cycles, ouvertures,
+// fermetures et phases d'urgence à chaque tick.
 void RunStateMachine(){
   if ((globalSecure || IsRemoteAutoEmergency()) && !IsEmergencyActive()) return;
   if (mode == Mode.PreLockPressurize)
@@ -1305,6 +1378,7 @@ void RunStateMachine(){
   }
 }
 
+// Détecte les compromis du SAS courant : fuite O2 ou porte endommagée.
 void MonitorSasCompromise(){
 
   string _src; EmergencyCause _c;
@@ -1331,6 +1405,7 @@ void MonitorSasCompromise(){
   }
 }
 
+// Surveille les pièces taguées [ROOM:...] et active le confinement si besoin.
 void MonitorRoomLeaks(){
   var rooms = new List<string>(roomToVents.Keys);
 
@@ -1444,6 +1519,7 @@ void MonitorRoomLeaks(){
   }
 }
 
+// Une porte abîmée au-delà du seuil déclenche une urgence pour éviter une fuite.
 bool IsAnyDoorSeverelyDamaged(){
   for (int i=0;i<doorsIN.Count;i++) if (IsDoorBad(doorsIN[i])) return true;
   for (int i=0;i<doorsOUT.Count;i++) if (IsDoorBad(doorsOUT[i])) return true;
@@ -1459,6 +1535,9 @@ bool IsDoorBad(IMyDoor d){
   return hp < DOOR_MIN_HEALTH;
 }
 
+// Active ou lève le confinement d'une pièce.
+// En confinement : portes fermées/verrouillées, évents non-sondes coupés,
+// lumières rouges et alarme locale si disponible.
 void ToggleContain(string key, bool? forceOn, bool allowAutoOff = false){
   key = NormalizeKey(key);
   bool isActive = containActive.Contains(key);
@@ -1550,6 +1629,7 @@ void ToggleContain(string key, bool? forceOn, bool allowAutoOff = false){
   }
 }
 
+// Demande manuelle avec délai de protocole pour éviter les bascules accidentelles.
 bool ManualRequestContain(string keyRaw, bool wantOn){
   string key = NormalizeKey(keyRaw);
 
@@ -1590,6 +1670,7 @@ bool ManualRequestContain(string keyRaw, bool wantOn){
   return true;
 }
 
+// Suspension temporaire : laisse le joueur rouvrir une zone confinée un court instant.
 bool SuspendContain(string room){
   string key = NormalizeKey(room);
 
@@ -1635,6 +1716,7 @@ bool IsContainSuspended(string room)
   }
   return false;
 }
+// Ouvre temporairement la porte autorisée après un cycle réussi.
 void BeginHoldOpen(bool isIn){
   if (phaseGate) return;
   var list = isIn ? doorsIN : doorsOUT;
@@ -1643,12 +1725,14 @@ void BeginHoldOpen(bool isIn){
   if (isIn) SetEnabled(doorsOUT,false); else SetEnabled(doorsIN,false);
   modeStart=Now; mode = isIn ? Mode.HoldOpenIn : Mode.HoldOpenOut;
 }
+// Referme la porte active puis rend la main à la machine d'état.
 void BeginClosing(bool isIn){
   if (activeDoor==null){ mode=Mode.Idle; return; }
   activeDoor.Enabled=true; activeDoor.CloseDoor();
   modeStart=Now; mode = isIn ? Mode.ClosingIn : Mode.ClosingOut;
 }
 
+// Synchronise LEDs et sons avec l'état courant du SAS et les alertes globales.
 void UpdateSignals(){
   bool inEmergency = IsEmergencyActive();
 
@@ -1732,6 +1816,7 @@ VRageMath.Color Red(){ return new VRageMath.Color(255,40,40); }
 
 VRageMath.Color White(){ return new VRageMath.Color(255,255,255); }
 
+// Clignotement rouge très faible pendant alerte/sécurité
 void SetLedsSolidOnGroup(List<IMyLightingBlock> group, VRageMath.Color c){
   for (int i=0;i<group.Count;i++){ var l=group[i]; l.Enabled=true; l.Color=c; l.BlinkIntervalSeconds=0f; l.BlinkLength=50f; l.Intensity=2.0f; l.Radius=System.Math.Max(l.Radius,5f); }
 }
@@ -1740,6 +1825,7 @@ void SetLedsBlinkOnGroup(List<IMyLightingBlock> group, VRageMath.Color c, float 
 }
 void SetLedsOffGroup(List<IMyLightingBlock> group){ for (int i=0;i<group.Count;i++) group[i].Enabled=false; }
 
+// Les sound blocks ont parfois besoin d'un "kick" régulier pour relancer la boucle.
 void PrepareSoundBlock(IMySoundBlock s, string fallbackName, float loopPeriod){
   if (s == null) return;
   s.Enabled = true;
@@ -1785,6 +1871,7 @@ void CloseAllDoors(){ for (int i=0;i<doorsIN.Count;i++) doorsIN[i].CloseDoor(); 
 void EnableAllDoors(){ SetEnabled(doorsIN,true); SetEnabled(doorsOUT,true); }
 void SetEnabled(List<IMyDoor> list, bool on){ for (int i=0;i<list.Count;i++) list[i].Enabled=on; }
 
+// Restaure/coupe uniquement les évents utiles au cyclage, jamais les sondes.
 void RestoreNonProbeVents(bool on){
   for (int i=0;i<allVents.Count;i++){
     var v=allVents[i]; if (IsProbe(v)){ v.Enabled=true; v.Depressurize=false; }
@@ -1820,12 +1907,13 @@ void RestoreNonProbeVentsToBackup(){
   
     if (VentIsContained(v)) { v.Enabled = false; continue; }
 
-  
+    //Fin d’urgence : relance obligatoire de TOUTES les non-PROBE hors (auto)contain
     v.Enabled = true;
     v.Depressurize = false;
   }
 }
 
+// Maintient les portes de confinement fermées/verrouillées tant que la zone est active.
 void EnforceContainDoorsClosedAndLocked(){
   foreach (var key in containActive){
     bool tempUnlock = false; double until;
@@ -1864,6 +1952,7 @@ void ResetRoomLightsIfNoEmergency()
   }
 }
 
+// Auto-close générique pour les portes du groupe AUTOCLOSE_DOORS.
 void AutoCloseDoors(){
   if (mode!=Mode.Idle){ openSince.Clear(); return; }
   TrackOpenTimes(doorsIN); TrackOpenTimes(doorsOUT); TrackOpenTimes(doorsAuto);
@@ -1883,6 +1972,7 @@ void MaybeAutoClose(IMyDoor d){
   if (openSince.ContainsKey(id) && Elapsed(openSince[id])>=AUTOCLOSE_SECONDS){ d.CloseDoor(); openSince.Remove(id); }
 }
 
+// Lecture O2 du SAS courant : sonde dédiée en priorité, sinon moyenne des évents.
 float ReadO2(){
 
   if (probeVents != null && probeVents.Count > 0){
@@ -1907,6 +1997,8 @@ bool IsDepressurized(){ return ReadO2() <= O2_DEPRESSURIZED; }
 
 
 
+// ----- LCD SAS (propre + infos SECURE / URGENCES / INTERLOCKS) -----
+// Affichage local du SAS : état, O2, portes, urgence et progression.
 void DrawLCD(){
   for (int i=0;i<lcds.Count;i++){
     var s = lcds[i];
@@ -1914,7 +2006,7 @@ void DrawLCD(){
     s.BackgroundColor = new VRageMath.Color(0,0,0,255);
     s.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.CENTER;
 
-  
+    // --- Statuts globaux & locaux
     string gSrc; EmergencyCause gCause;
     bool anyGlobalEmerg = ComputeGlobalEmergency(out gSrc, out gCause);
     bool localEmerg = IsEmergencyActive();
@@ -1923,7 +2015,7 @@ void DrawLCD(){
     float o2 = ReadO2();
     string o2Str = System.Math.Min(100,(int)(o2*100)).ToString("00") + "%";
 
-  
+    // Progress & timer selon phase courante
     double total = 0, remain = 0; float pBar = 0f; string phaseLine = null;
     if (localEmerg){
       if (mode == Mode.EmergencyPhase1){ total = EMERG_P1_SECONDS; phaseLine = "ÉTAT D'URGENCE — Sécurisation"; }
@@ -1942,12 +2034,12 @@ void DrawLCD(){
       phaseLine = (mode==Mode.HoldOpenIn) ? "PORTE INTÉRIEURE OUVERTE" : "PORTE EXTÉRIEURE OUVERTE";
     }
 
-  
+    // Portes & interlocks (lecture temps-réel)
     string inState  = GroupDoorStateLabel(doorsIN);
     string outState = GroupDoorStateLabel(doorsOUT);
     string interlocks = CurrentInterlockLabel(anyGlobalEmerg, remoteAutoEmerg, localEmerg);
 
-  
+    // Cible environnementale
     string env = EnvLabel(envTarget);
 
     var sb = new System.Text.StringBuilder(512);
@@ -1969,14 +2061,14 @@ void DrawLCD(){
       sb.AppendLine("URGENCE : verrouillage");
     }
 
-  
+    // NOUVEAU : si pas d’urgence locale, mais verrouillé par sécurité d’un autre SAS
     if (!localEmerg && globalSecure && anyGlobalEmerg){
       sb.AppendLine("MODE : SÉCURITÉ");
     }
 
     sb.AppendLine("--------------------------------");
 
-  
+    // Bloc état local
     bool secureRemote = (!localEmerg) && (globalSecure || anyGlobalEmerg);
     if (localEmerg){
       sb.AppendLine("URGENCE LOCALE — Cause : " + CauseLabel(emergencyCause));
@@ -1986,7 +2078,7 @@ void DrawLCD(){
       sb.AppendLine(MakeBar(pBar, 32));
     }
     else if (secureRemote){
-    
+      // SAS non concerné localement mais bloqué par une urgence ailleurs
       sb.AppendLine("MODE : SÉCURITÉ");
       sb.AppendLine("Statut : " + env);
     }
@@ -2003,7 +2095,7 @@ void DrawLCD(){
     sb.AppendLine();
     sb.AppendLine("O2 interne : " + o2Str);
 
-  
+    // Portes
     sb.AppendLine();
     sb.AppendLine("Portes :  INT = " + inState + "   |   EXT = " + outState);
 
@@ -2011,6 +2103,10 @@ void DrawLCD(){
   }
 }
 
+// -----------------------------------------------------------------------------
+// LCD overview global
+// -----------------------------------------------------------------------------
+// Match un bloc avec un SAS donné sans toucher SAS_NAME.
 bool MatchesSasName(IMyTerminalBlock b, string sasName){
   if (b == null) return false;
   var tag = ExtractSasTag(b.CustomName ?? "");
@@ -2018,10 +2114,11 @@ bool MatchesSasName(IMyTerminalBlock b, string sasName){
   return string.Equals(NormalizeSasName(tag), NormalizeSasName(sasName), StringComparison.OrdinalIgnoreCase);
 }
 
+// Snapshot d'un SAS : calcule O2 et action sans muter l'état global.
 void GetSasSnapshot(string sasName, out string o2str, out string action){
   o2str = "--"; action = "—";
 
-
+  // O2 : priorité PROBE, sinon vents du SAS.
   var probe = new List<IMyAirVent>();
   var ventsLocal = new List<IMyAirVent>();
 
@@ -2047,12 +2144,12 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
     if (n>0) o2str = System.Math.Min(100,(int)((sum/n)*100)).ToString("00")+"%";
   }
 
-
+  // Action : lit l'état mémorisé du SAS sans changer le contexte courant.
   SasState S;
   if (sasStates.TryGetValue(NormalizeSasName(sasName), out S) && S != null){
     bool inEmerg = (S.mode==Mode.EmergencyPhase1 || S.mode==Mode.EmergencyPhase2);
 
-  
+    // Contexte global (ne mute rien)
     string _gSrc; EmergencyCause _gCause;
     bool anyGlobalEmerg = ComputeGlobalEmergency(out _gSrc, out _gCause);
 
@@ -2063,8 +2160,8 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
       else                                                  action="URGENCE";
     }
     else if (globalSecure || anyGlobalEmerg){
-    
-    
+      // SAS non concerné localement mais sécurité globale armée
+      // ou urgence ailleurs -> on affiche SÉCURITÉ
       action = "SÉCURITÉ";
     }
     else {
@@ -2073,20 +2170,21 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
       else                                           action="—";
     }
   } else {
-  
+    // Fallback minimal si pas d’état en mémoire
     bool anyDep = false;
     for (int i=0;i<ventsLocal.Count;i++){ var v=ventsLocal[i]; if (v!=null && v.Depressurize){ anyDep=true; break; } }
     if (ventsLocal.Count>0) action = anyDep ? "DEPRESSURISER" : "PRESSURISER";
   }
 }
 
+// Rend une vue globale multi-SAS + pièces confinables.
 void DrawOverviewLCD(){
   if (lcdOverview.Count == 0) return;
 
   const int NAME_W = 22;
   const int O2_W   = 4;
 
-
+  // Bandeaux globaux
   string gSrc; EmergencyCause gCause;
   bool anyGlobalEmerg = ComputeGlobalEmergency(out gSrc, out gCause);
   string secureLine = globalSecure
@@ -2096,13 +2194,13 @@ void DrawOverviewLCD(){
     ? ("URGENCE GLOBALE : ACTIVE — Source: "+gSrc+" — Cause: "+CauseLabel(gCause))
     : "URGENCE GLOBALE : —";
 
-
+  // A) Tous les SAS
   var allSas = new List<string>(DiscoverAllSasNames());
   allSas.Sort(System.StringComparer.OrdinalIgnoreCase);
   var sasSet = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
   for (int i=0;i<allSas.Count;i++) sasSet.Add(NormalizeSasName(allSas[i]));
 
-
+  // B) Rooms (globales) — filtre celles qui portent exactement un nom de SAS
   var rooms = new List<string>(roomToVents.Keys);
   rooms.Sort(System.StringComparer.OrdinalIgnoreCase);
   var filteredRooms = new List<string>();
@@ -2111,7 +2209,7 @@ void DrawOverviewLCD(){
     if (!sasSet.Contains(rn)) filteredRooms.Add(rooms[i]);
   }
 
-
+  // Rendu
   for (int i = 0; i < lcdOverview.Count; i++){
     var s = lcdOverview[i];
     s.ContentType     = VRage.Game.GUI.TextPanel.ContentType.TEXT_AND_IMAGE;
@@ -2127,19 +2225,19 @@ void DrawOverviewLCD(){
     sb.AppendLine(PadL("NOM", NAME_W) + " | " + PadL("%O2", O2_W) + " | ACTION");
     sb.AppendLine(new string('-', NAME_W) + "-+-" + new string('-', O2_W) + "-+---------------");
 
-  
+    // 1) Tous les SAS (SAS 01, SAS 02, ...)
     for (int k=0;k<allSas.Count;k++){
       string name = allSas[k];
       string o2S, actS; GetSasSnapshot(name, out o2S, out actS);
       sb.AppendLine(PadL(NormalizeSasName(name), NAME_W) + " | " + PadR(o2S, O2_W) + " | " + actS);
     }
 
-  
+    // 2) Rooms
     for (int k=0;k<filteredRooms.Count;k++){
       string room = filteredRooms[k];
       string keyN = NormalizeKey(room);
 
-    
+      // O2 room (PROBE prioritaire)
       float o2 = 0f; int n = 0;
       IMyAirVent pv = null; roomPrimaryVent.TryGetValue(room, out pv);
       bool hasProbe = (pv != null && IsProbe(pv));
@@ -2204,6 +2302,7 @@ void DrawOverviewLCD(){
   }
 }
 
+// Affichage dédié aux pièces [ROOM:...] : confinement, O2, tests et délais.
 void DrawRoomLCDs(){
   if (roomLCDs.Count == 0) return;
 
@@ -2352,6 +2451,7 @@ void DrawRoomLCDs(){
   }
 }
 
+// Helpers LCD : tables texte compactes pour écrans Space Engineers.
 string PadL(string txt, int width){ if (txt==null) txt=""; if (txt.Length>width) return (width<=1)?txt.Substring(0,1):(txt.Substring(0,width-1)+"…"); return txt.PadRight(width,' '); }
 string PadR(string txt, int width){ if (txt==null) txt=""; if (txt.Length>width) return (width<=1)?txt.Substring(0,1):(txt.Substring(0,width-1)+"…"); return txt.PadLeft(width,' '); }
 string MakeBar(float p, int width){
@@ -2367,6 +2467,7 @@ string MakeBar(float p, int width){
   return sb.ToString();
 }
 
+// Résumé court dans le terminal du bloc programmable.
 void EchoStatus(){
   Echo("Mode: "+mode+" | Target: "+envTarget+" | Cause: "+emergencyCause);
   Echo("Rooms: "+roomToVents.Count+"");
@@ -2378,12 +2479,14 @@ void EchoStatus(){
   if (mode==Mode.EmergencyPhase2) Echo("Emerg P2 rem.: "+(EMERG_P2_SECONDS-Elapsed(modeStart)).ToString("0.0")+" s");
 }
 
+// Diagnostic rapide des tags [SAS:...] détectés sur la grille.
 void DebugScanSas()
 {
   Echo($"[DEBUG] SAS cible = {SAS_NAME}");
   Echo($" vents={vents.Count}, probes={probeVents.Count}, IN={doorsIN.Count}, OUT={doorsOUT.Count}, lcd={lcds.Count}, leds={leds.Count}, sndN={sndNormal.Count}");
 }
 
+// Découvre tous les SAS connus via tags de blocs et état sauvegardé.
 HashSet<string> DiscoverAllSasNames() {
   var set = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
   var groups = new List<IMyBlockGroup>(); GTS.GetBlockGroups(groups);
@@ -2399,6 +2502,7 @@ HashSet<string> DiscoverAllSasNames() {
   if (set.Count==0) set.Add(SAS_NAME);
   return set;
 }
+// Charge l'état persistant d'un SAS dans les variables actives.
 void LoadSasState(string sas) {
   var S = GetState(sas);
   mode = S.mode;
@@ -2425,6 +2529,7 @@ void LoadSasState(string sas) {
   backupAllVentsEnabled = new Dictionary<long,bool>(S.backupAllVentsEnabled);
 }
 
+// Sauvegarde les variables actives dans l'état persistant du SAS courant.
 void SaveSasState(string sas)
 {
   var S = GetState(sas);
@@ -2444,6 +2549,7 @@ void SaveSasState(string sas)
   S.backupAllVentsEnabled = new Dictionary<long, bool>(backupAllVentsEnabled);
 }
 
+// Vérifie si au moins un SAS est en urgence et retourne la source.
 bool ComputeGlobalEmergency(out string sourceSas, out EmergencyCause cause) {
   sourceSas = null; cause = EmergencyCause.None;
   foreach (var kv in sasStates) {
@@ -2454,11 +2560,12 @@ bool ComputeGlobalEmergency(out string sourceSas, out EmergencyCause cause) {
   return false;
 }
 
+// Pilote les alarmes et lumières globales selon urgence/secure.
 void UpdateGlobalEmergencySignals() {
   string src; EmergencyCause c;
   bool any = ComputeGlobalEmergency(out src, out c);
 
-
+  // Snapshot / forçage des vents non-probe en urgence globale
   if (any && !globalEmergencyActive) {
     globalVentsBackup.Clear();
     for (int i = 0; i < allVents.Count; i++) {
@@ -2485,23 +2592,23 @@ void UpdateGlobalEmergencySignals() {
   float globalAlarmLoop = globalSecure ? SECURE_LOOP_PERIOD : ALARM_LOOP_PERIOD;
   double globalAlarmKick = globalSecure ? SECURE_KICK_PERIOD : ALARM_KICK_PERIOD;
 
-
+  // LEDs d’urgence globales
   if (wantGlobalLeds) EmergencyLedsBlinkRedDim(ledsEmergency);
   else                EmergencyLedsSolidWhiteRestore(ledsEmergency);
 
-
+  // LEDs des zones de confinement suivent l’état global
   foreach (var kv in containLights) {
     if (wantGlobalLeds) SetLedsBlinkOnGroup(kv.Value, Red(), 0.5f, 60f);
     else                SetLedsOffGroup(kv.Value);
   }
 
-
-
+  // Sirène globale (groupe AIRLOCK_ALARM).
+  // L'urgence locale garde la priorité sonore avec Alert 1.
   if (!localEmergencyIsSource) {
     var globalSoundBlocks = (sndAlarm.Count > 0) ? sndAlarm : sndNormal;
     SoundGroupUpdate(
       globalSoundBlocks,
-      wantGlobalAlarm,         
+      wantGlobalAlarm,          // => urgence distante ou secure global
       globalAlarmSound,
       globalAlarmLoop,
       globalAlarmKick,
@@ -2514,6 +2621,7 @@ void UpdateGlobalEmergencySignals() {
 }
 
 HashSet<long> allProbeVentIds = new HashSet<long>();
+// Détection centralisée des sondes O2, même hors SAS courant.
 bool IsProbeGlobal(IMyAirVent v)
 {
   if (v == null) return false;
@@ -2525,6 +2633,7 @@ bool IsProbeGlobal(IMyAirVent v)
   return false;
 }
 
+// Ferme puis désactive une liste de portes dès qu'elles sont réellement closes.
 void ForceCloseAndHardLock(List<IMyDoor> list)
 {
   for (int i = 0; i < list.Count; i++)
@@ -2542,6 +2651,7 @@ void ForceCloseAndHardLock(List<IMyDoor> list)
   }
 }
 
+// Une urgence distante verrouille les SAS non concernés sans relancer une urgence locale.
 bool IsRemoteAutoEmergency()
 {
   string src; EmergencyCause c;
@@ -2614,6 +2724,7 @@ void RestoreNonProbeVentsFromSnapshot(Dictionary<long,bool> snap){
   }
 }
 
+// Mode sécurité global : verrouille tous les SAS et coupe les évents non-sondes.
 void ActivateSecure(){
   if (secureApplied) return;
   string _s; EmergencyCause _c;
@@ -2632,6 +2743,7 @@ void ActivateSecure(){
   secureApplied = true;
 }
 
+// Sortie du mode sécurité : restaure les évents si aucune urgence n'est active.
 void DeactivateSecure(){
   if (!secureApplied) return;
 
@@ -2652,6 +2764,7 @@ void DeactivateSecure(){
   if (globalVentsBackup.Count > 0) globalVentsBackup.Clear();
 }
 
+// Annule une action de porte en cours et revient vers Idle après fermeture.
 void AbortSasDoorActionsAndClose()
 {
   activeDoor = null;

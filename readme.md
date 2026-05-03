@@ -25,9 +25,13 @@ Le système s'initialise en scannant les groupes de blocs définis dans les cons
 | `AIRLOCK_DOORS_IN` | Portes menant à l'intérieur de la base. |
 | `AIRLOCK_DOORS_OUT` | Portes menant à l'extérieur ou au hangar. |
 | `AIRLOCK_LCD` | Écrans d'affichage du statut local. |
+| `AIRLOCK_LEDS` | Lumières locales du SAS : état, cyclage, sécurité et urgence. |
 | `AIRLOCK_SOUND` | Sound blocks du SAS : cycle normal et repli sonore si `AIRLOCK_ALARM` est absent. |
+| `AIRLOCK_SAS_PROBE` | Évents sondes du SAS pour mesurer l'O2 sans piloter le cyclage. |
 | `AIRLOCK_ALARM` | Sound blocks d'alarme globale / secure, prioritaire si le groupe existe. |
 | `AIRLOCK_EMERGENCY_LEDS` | Lumières d'alerte globale et mode secure. |
+| `AUTOCLOSE_DOORS` | Portes surveillées par l'auto-close global. |
+| `VENTS_OVERVIEW_LCD` | LCD overview global des SAS et pièces surveillées. |
 
 * **Tagging :** Utilisez le format `[SAS:NomDuSas]` dans le nom des blocs pour les assigner à un SAS spécifique.
 * **Sondes :** Le tag `[PROBE]` sur un évent permet une lecture précise de l'O2 sans affecter la pressurisation.
