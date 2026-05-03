@@ -1,24 +1,19 @@
-const string VENTS_GROUP = "AIRLOCK_VENTS";
-const string DOORS_IN_GROUP         = "AIRLOCK_DOORS_IN";
-const string DOORS_OUT_GROUP        = "AIRLOCK_DOORS_OUT";
-const string LCD_GROUP              = "AIRLOCK_LCD";
-const string LEDS_GROUP             = "AIRLOCK_LEDS";
-const string SOUND_NORMAL_GROUP     = "AIRLOCK_SOUND";
-const string PROBE_VENTS_GROUP = "AIRLOCK_SAS_PROBE";
+const string VENTS_GROUP        = "AIRLOCK_VENTS";
+const string DOORS_IN_GROUP     = "AIRLOCK_DOORS_IN";
+const string DOORS_OUT_GROUP    = "AIRLOCK_DOORS_OUT";
+const string LCD_GROUP          = "AIRLOCK_LCD";
+const string LEDS_GROUP         = "AIRLOCK_LEDS";
+const string SOUND_NORMAL_GROUP = "AIRLOCK_SOUND";
+const string PROBE_VENTS_GROUP  = "AIRLOCK_SAS_PROBE";
 
-const string EMERGENCY_LEDS_GROUP   = "AIRLOCK_EMERGENCY_LEDS";
-const string SOUND_ALARM_GROUP = "AIRLOCK_ALARM";
-
-const string AUTOCLOSE_DOORS_GROUP  = "AUTOCLOSE_DOORS";
-const string OVERVIEW_LCD_GROUP     = "VENTS_OVERVIEW_LCD";
+const string EMERGENCY_LEDS_GROUP  = "AIRLOCK_EMERGENCY_LEDS";
+const string SOUND_ALARM_GROUP     = "AIRLOCK_ALARM";
+const string AUTOCLOSE_DOORS_GROUP = "AUTOCLOSE_DOORS";
+const string OVERVIEW_LCD_GROUP    = "VENTS_OVERVIEW_LCD";
 
 const bool SECURE_USES_GLOBAL_LEDS  = true;
-const bool SECURE_USES_GLOBAL_ALARM = true; 
-
-const bool LIMIT_TO_CONSTRUCT = true;
-
-
-
+const bool SECURE_USES_GLOBAL_ALARM = true;
+const bool LIMIT_TO_CONSTRUCT       = true;
 
 bool globalSecure = false;
 
@@ -87,6 +82,7 @@ bool MatchesSas(IMyTerminalBlock b) {
 }
 
 string _sasNameBackup = null;
+
 void WithSas(string sas, Action body) {
   _sasNameBackup = SAS_NAME;
   if (!string.IsNullOrEmpty(sas)) SAS_NAME = NormalizeSasName(sas);
@@ -96,44 +92,48 @@ void WithSas(string sas, Action body) {
 }
 
 const string CONTAIN_GROUP_PREFIX = "CONTAIN_";
-const string ROOM_LCD_GROUP         = "ROOM_STATUS_LCD";
-const string ROOM_TAG_PREFIX        = "[ROOM:";
-const string PROBE_TAG = "[PROBE]";
+const string ROOM_LCD_GROUP       = "ROOM_STATUS_LCD";
+const string ROOM_TAG_PREFIX      = "[ROOM:";
+const string PROBE_TAG            = "[PROBE]";
 
-const float ROOM_LEAK_THRESHOLD   = 0.20f;
-const float ROOM_RELEASE_O2 = 0.25f;  
+const float ROOM_LEAK_THRESHOLD      = 0.20f;
+const float ROOM_RELEASE_O2          = 0.25f;
 const float ROOM_DROP_RETEST_TRIGGER = 0.20f;
 
-const double ROOM_TEST_DURATION         = 10.0; 
-const double ROOM_RETEST_PERIOD         = 60.0; 
+const double ROOM_TEST_DURATION = 10.0;
+const double ROOM_RETEST_PERIOD = 60.0;
 
-const double DOOR_TEMP_UNLOCK_SECONDS   = 8.0; 
+const double DOOR_TEMP_UNLOCK_SECONDS = 8.0;
 const double RELEASE_DELAY_ON_RECOVER = 10.0; 
 
 const float ROOM_TEST_TRIGGER = 0.20f;
 
 const double MANUAL_CONTAIN_PROTO_SECONDS = 10.0;
 
-const float O2_PRESSURIZED = 0.95f;
-const float  O2_DEPRESSURIZED     = 0.05f;
-const float  LEAK_O2_THRESHOLD    = 0.20f;  
-const float  DOOR_MIN_HEALTH      = 0.60f;  
-const double CYCLE_SECONDS        = 10.0;   
-const double AUTOCLOSE_SECONDS    = 8.0;
-const double DOOR_HOLD_SECONDS    = 30.0;
+const float O2_PRESSURIZED      = 0.95f;
+const float O2_DEPRESSURIZED    = 0.05f;
+const float LEAK_O2_THRESHOLD   = 0.20f;
+const float DOOR_MIN_HEALTH     = 0.60f;
+const double CYCLE_SECONDS      = 10.0;
+const double AUTOCLOSE_SECONDS  = 8.0;
+const double DOOR_HOLD_SECONDS  = 30.0;
 
-const double EMERG_P1_SECONDS     = 30.0;   
-const double EMERG_P2_SECONDS     = 5.0;    
-const bool   RESTORE_AFTER_EMERG  = true;   
+const double EMERG_P1_SECONDS    = 30.0;
+const double EMERG_P2_SECONDS    = 5.0;
+const bool RESTORE_AFTER_EMERG   = true;
 bool emergMidChecked = false;
 
-const string DEFAULT_SOUND_NORMAL = "Alarm 2";
-const string DEFAULT_SOUND_ALARM = "Alarm 1";
-const string DEFAULT_ROOM_ALERT_SOUND = "Alarm 3";
-const float  NORMAL_LOOP_PERIOD   = 1.0f;
+const string SOUND_PRESSURE_CYCLE = "Alert 3"; 
+const string SOUND_GLOBAL_ALARM   = "Alert 2"; 
+const string SOUND_LOCAL_ALARM    = "Alert 1"; 
+const string SOUND_SECURE_ALARM   = "Drone Large";
+const string DEFAULT_ROOM_ALERT_SOUND = "Alert 1";
+const float NORMAL_LOOP_PERIOD    = 1.0f;
 const double NORMAL_KICK_PERIOD   = 1.0;
-const float  ALARM_LOOP_PERIOD    = 1.0f;
+const float ALARM_LOOP_PERIOD     = 1.0f;
 const double ALARM_KICK_PERIOD    = 1.0;
+const float SECURE_LOOP_PERIOD    = 2.0f;
+const double SECURE_KICK_PERIOD   = 2.0;
 
 class SasState {
   public Mode mode = Mode.Idle;
@@ -154,6 +154,7 @@ class SasState {
 }
 
 Dictionary<string, SasState> sasStates = new Dictionary<string, SasState>(System.StringComparer.OrdinalIgnoreCase);
+
 SasState GetState(string sas) {
   SasState st;
   if (!sasStates.TryGetValue(sas, out st)) { st = new SasState(); sasStates[sas] = st; }
@@ -238,6 +239,7 @@ double normalLastKick = -9999, alarmLastKick = -9999;
 double _now = 0;
 double Now { get { return _now; } }
 double Elapsed(double t0) { return Now - t0; }
+
 void AdvanceClock(UpdateType src)
 {
   double dt = Runtime.TimeSinceLastRun.TotalSeconds;
@@ -548,6 +550,7 @@ public Program() {
     }
 
   
+  
     var meTag = ExtractSasTag(Me.CustomName);
     if (!string.IsNullOrEmpty(meTag)) SAS_NAME = meTag;
     SAS_NAME = NormalizeSasName(SAS_NAME);
@@ -574,6 +577,7 @@ public void Main(string argument, UpdateType updateSource)
   string __src; EmergencyCause __cause;
   bool anyEmergNow = ComputeGlobalEmergency(out __src, out __cause);
 
+
   if (arg == "secure on" || arg == "securite on" || arg == "confinement on") {
     globalSecure = true;
     ActivateSecure();
@@ -597,6 +601,7 @@ public void Main(string argument, UpdateType updateSource)
     }
     Save();
   }
+
 
   if (!string.IsNullOrEmpty(rawArg) &&
       (arg.StartsWith("pressu") || arg.StartsWith("depressu") ||
@@ -668,6 +673,7 @@ public void Main(string argument, UpdateType updateSource)
       });
     }
   }
+
 
   var all = DiscoverAllSasNames();
   foreach (var sas in all)
@@ -792,15 +798,14 @@ void CollectBlocks()
     for (int i = 0; i < tmp.Count; i++) { var l = tmp[i] as IMyLightingBlock; if (l != null) ledsEmergency.Add(l); }
   }
 
-  // --- NOUVEAU : mémoriser l’intensité de base des LED d’urgence ---
+
   for (int i = 0; i < ledsEmergency.Count; i++) {
     var l = ledsEmergency[i];
     if (l == null) continue;
     if (!emergencyBaseIntensity.ContainsKey(l.EntityId)) {
-      emergencyBaseIntensity[l.EntityId] = l.Intensity; // snapshot intensité utilisateur
+      emergencyBaseIntensity[l.EntityId] = l.Intensity;
     }
   }
-  // -----------------------------------------------------------------
 
   var gSndA = GTS.GetBlockGroupWithName(SOUND_ALARM_GROUP);
   if (gSndA != null)
@@ -963,6 +968,7 @@ string ExtractRoomTag(string name){
   var rm = name.Substring(i+ROOM_TAG_PREFIX.Length, j-(i+ROOM_TAG_PREFIX.Length)).Trim();
   return string.IsNullOrEmpty(rm) ? null : rm;
 }
+
 bool IsProbe(IMyAirVent v){ return IsProbeGlobal(v); }
 string NormalizeKey(string s){ return (s??"").Trim().ToUpperInvariant(); }
 bool IsEmergencyActive(){ return mode==Mode.EmergencyPhase1 || mode==Mode.EmergencyPhase2; }
@@ -1005,10 +1011,7 @@ void PlayOneShot(List<IMySoundBlock> list, string fallback = null){
   if (list == null) return;
   for (int i=0;i<list.Count;i++){
     var s = list[i]; if (s==null || !s.IsFunctional) continue;
-    s.Enabled = true;
-    if (string.IsNullOrEmpty(s.SelectedSound)) s.SelectedSound = fallback;
-    s.LoopPeriod = 5f;
-    if (s.Volume < 0.1f) s.Volume = 1.0f;
+    PrepareSoundBlock(s, fallback, 5f);
     s.Stop(); s.Play();
   }
 }
@@ -1043,7 +1046,6 @@ void EndRoomPressuTest(string room, float probeO2){
     SetRoomNonProbeVentsPressurize(room, false);
   }
 }
-
 
 void BeginPreLock(bool toPressurize){
   SetEnabled(doorsIN,true); SetEnabled(doorsOUT,true);
@@ -1657,7 +1659,7 @@ void UpdateSignals(){
     SetLedsBlinkOnGroup(leds, Red(), 0.5f, 60f);
 
   
-    SoundGroupUpdate(sndNormal, false, DEFAULT_SOUND_NORMAL,
+    SoundGroupUpdate(sndNormal, false, SOUND_PRESSURE_CYCLE,
                      NORMAL_LOOP_PERIOD, NORMAL_KICK_PERIOD,
                      ref normalSoundOn, ref normalLastKick);
 
@@ -1677,10 +1679,20 @@ void UpdateSignals(){
       SetLedsBlinkOnGroup(kv.Value, Red(), 0.5f, 60f);
 
   
-    SoundGroupUpdate(sndNormal, false, DEFAULT_SOUND_NORMAL,
-                     NORMAL_LOOP_PERIOD, NORMAL_KICK_PERIOD,
-                     ref normalSoundOn, ref normalLastKick);
+    if (sndAlarm.Count > 0) {
+      SoundGroupUpdate(sndNormal, false, SOUND_PRESSURE_CYCLE,
+                       NORMAL_LOOP_PERIOD, NORMAL_KICK_PERIOD,
+                       ref normalSoundOn, ref normalLastKick);
 
+      SoundGroupUpdate(sndAlarm, true, SOUND_LOCAL_ALARM,
+                       ALARM_LOOP_PERIOD, ALARM_KICK_PERIOD,
+                       ref alarmSoundOn, ref alarmLastKick);
+    } else {
+      SoundGroupUpdate(sndNormal, true, SOUND_LOCAL_ALARM,
+                       ALARM_LOOP_PERIOD, ALARM_KICK_PERIOD,
+                       ref normalSoundOn, ref normalLastKick);
+      alarmSoundOn = false;
+    }
   
     return;
   }
@@ -1702,10 +1714,13 @@ void UpdateSignals(){
 
 
   bool inCycle = (mode==Mode.Pressurizing || mode==Mode.Depressurizing);
-  SoundGroupUpdate(sndNormal, inCycle, DEFAULT_SOUND_NORMAL,
+  SoundGroupUpdate(sndNormal, inCycle, SOUND_PRESSURE_CYCLE,
                    NORMAL_LOOP_PERIOD, NORMAL_KICK_PERIOD,
                    ref normalSoundOn, ref normalLastKick);
 
+  SoundGroupUpdate(sndAlarm, false, SOUND_LOCAL_ALARM,
+                   ALARM_LOOP_PERIOD, ALARM_KICK_PERIOD,
+                   ref alarmSoundOn, ref alarmLastKick);
 
 }
 
@@ -1717,7 +1732,6 @@ VRageMath.Color Red(){ return new VRageMath.Color(255,40,40); }
 
 VRageMath.Color White(){ return new VRageMath.Color(255,255,255); }
 
-// Clignotement rouge très faible pendant alerte/sécurité
 void SetLedsSolidOnGroup(List<IMyLightingBlock> group, VRageMath.Color c){
   for (int i=0;i<group.Count;i++){ var l=group[i]; l.Enabled=true; l.Color=c; l.BlinkIntervalSeconds=0f; l.BlinkLength=50f; l.Intensity=2.0f; l.Radius=System.Math.Max(l.Radius,5f); }
 }
@@ -1726,16 +1740,43 @@ void SetLedsBlinkOnGroup(List<IMyLightingBlock> group, VRageMath.Color c, float 
 }
 void SetLedsOffGroup(List<IMyLightingBlock> group){ for (int i=0;i<group.Count;i++) group[i].Enabled=false; }
 
+void PrepareSoundBlock(IMySoundBlock s, string fallbackName, float loopPeriod){
+  if (s == null) return;
+  s.Enabled = true;
+  if (!string.IsNullOrWhiteSpace(fallbackName) && s.SelectedSound != fallbackName) s.SelectedSound = fallbackName;
+  s.LoopPeriod = loopPeriod;
+  if (s.Volume < 0.1f) s.Volume = 1.0f;
+}
+
 void SoundGroupUpdate(List<IMySoundBlock> list, bool wantOn, string fallbackName,
                       float loopPeriod, double kickPeriod, ref bool onFlag, ref double lastKick){
+  if (list == null || list.Count == 0) { onFlag = false; return; }
+
   if (wantOn){
     if (!onFlag){
-      for (int i=0;i<list.Count;i++){ var s=list[i]; s.Enabled=true; if (string.IsNullOrEmpty(s.SelectedSound)) s.SelectedSound=fallbackName; s.LoopPeriod=loopPeriod; s.Stop(); s.Play(); }
+      for (int i=0;i<list.Count;i++){
+        var s=list[i]; if (s == null || !s.IsFunctional) continue;
+        PrepareSoundBlock(s, fallbackName, loopPeriod);
+        s.Stop(); s.Play();
+      }
       onFlag=true; lastKick=Now;
     } else if (Now-lastKick>=kickPeriod){
-      for (int i=0;i<list.Count;i++){ var s=list[i]; s.Stop(); s.Play(); } lastKick=Now;
+      for (int i=0;i<list.Count;i++){
+        var s=list[i]; if (s == null || !s.IsFunctional) continue;
+        PrepareSoundBlock(s, fallbackName, loopPeriod);
+        s.Stop(); s.Play();
+      }
+      lastKick=Now;
     }
-  } else { if (onFlag){ for (int i=0;i<list.Count;i++) list[i].Stop(); onFlag=false; } }
+  } else {
+    if (onFlag){
+      for (int i=0;i<list.Count;i++){
+        var s=list[i]; if (s == null) continue;
+        s.Stop();
+      }
+      onFlag=false;
+    }
+  }
 }
 
 bool AllClosed(List<IMyDoor> list){ for (int i=0;i<list.Count;i++) if (list[i].Status!=DoorStatus.Closed) return false; return true; }
@@ -1779,7 +1820,7 @@ void RestoreNonProbeVentsToBackup(){
   
     if (VentIsContained(v)) { v.Enabled = false; continue; }
 
-    //Fin d’urgence : relance obligatoire de TOUTES les non-PROBE hors (auto)contain
+  
     v.Enabled = true;
     v.Depressurize = false;
   }
@@ -1866,7 +1907,6 @@ bool IsDepressurized(){ return ReadO2() <= O2_DEPRESSURIZED; }
 
 
 
-// ----- LCD SAS (propre + infos SECURE / URGENCES / INTERLOCKS) -----
 void DrawLCD(){
   for (int i=0;i<lcds.Count;i++){
     var s = lcds[i];
@@ -1874,7 +1914,7 @@ void DrawLCD(){
     s.BackgroundColor = new VRageMath.Color(0,0,0,255);
     s.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.CENTER;
 
-    // --- Statuts globaux & locaux
+  
     string gSrc; EmergencyCause gCause;
     bool anyGlobalEmerg = ComputeGlobalEmergency(out gSrc, out gCause);
     bool localEmerg = IsEmergencyActive();
@@ -1883,7 +1923,7 @@ void DrawLCD(){
     float o2 = ReadO2();
     string o2Str = System.Math.Min(100,(int)(o2*100)).ToString("00") + "%";
 
-    // Progress & timer selon phase courante
+  
     double total = 0, remain = 0; float pBar = 0f; string phaseLine = null;
     if (localEmerg){
       if (mode == Mode.EmergencyPhase1){ total = EMERG_P1_SECONDS; phaseLine = "ÉTAT D'URGENCE — Sécurisation"; }
@@ -1902,12 +1942,12 @@ void DrawLCD(){
       phaseLine = (mode==Mode.HoldOpenIn) ? "PORTE INTÉRIEURE OUVERTE" : "PORTE EXTÉRIEURE OUVERTE";
     }
 
-    // Portes & interlocks (lecture temps-réel)
+  
     string inState  = GroupDoorStateLabel(doorsIN);
     string outState = GroupDoorStateLabel(doorsOUT);
     string interlocks = CurrentInterlockLabel(anyGlobalEmerg, remoteAutoEmerg, localEmerg);
 
-    // Cible environnementale
+  
     string env = EnvLabel(envTarget);
 
     var sb = new System.Text.StringBuilder(512);
@@ -1929,14 +1969,14 @@ void DrawLCD(){
       sb.AppendLine("URGENCE : verrouillage");
     }
 
-    // NOUVEAU : si pas d’urgence locale, mais verrouillé par sécurité d’un autre SAS
+  
     if (!localEmerg && globalSecure && anyGlobalEmerg){
       sb.AppendLine("MODE : SÉCURITÉ");
     }
 
     sb.AppendLine("--------------------------------");
 
-    // Bloc état local
+  
     bool secureRemote = (!localEmerg) && (globalSecure || anyGlobalEmerg);
     if (localEmerg){
       sb.AppendLine("URGENCE LOCALE — Cause : " + CauseLabel(emergencyCause));
@@ -1946,7 +1986,7 @@ void DrawLCD(){
       sb.AppendLine(MakeBar(pBar, 32));
     }
     else if (secureRemote){
-      // SAS non concerné localement mais bloqué par une urgence ailleurs
+    
       sb.AppendLine("MODE : SÉCURITÉ");
       sb.AppendLine("Statut : " + env);
     }
@@ -1963,7 +2003,7 @@ void DrawLCD(){
     sb.AppendLine();
     sb.AppendLine("O2 interne : " + o2Str);
 
-    // Portes
+  
     sb.AppendLine();
     sb.AppendLine("Portes :  INT = " + inState + "   |   EXT = " + outState);
 
@@ -1971,8 +2011,6 @@ void DrawLCD(){
   }
 }
 
-// ----- LCD OVERVIEW GLOBAL (propre + bandeaux SECURE/urgence + table) -----
-// --- Helper: match un bloc avec un SAS donné sans toucher SAS_NAME ---
 bool MatchesSasName(IMyTerminalBlock b, string sasName){
   if (b == null) return false;
   var tag = ExtractSasTag(b.CustomName ?? "");
@@ -1980,11 +2018,10 @@ bool MatchesSasName(IMyTerminalBlock b, string sasName){
   return string.Equals(NormalizeSasName(tag), NormalizeSasName(sasName), StringComparison.OrdinalIgnoreCase);
 }
 
-// --- Snapshot d’un SAS: calcule O2 et "action" SANS muter l’état global ---
 void GetSasSnapshot(string sasName, out string o2str, out string action){
   o2str = "--"; action = "—";
 
-  // 1) O2 : priorité PROBE, sinon vents du SAS
+
   var probe = new List<IMyAirVent>();
   var ventsLocal = new List<IMyAirVent>();
 
@@ -2010,12 +2047,12 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
     if (n>0) o2str = System.Math.Min(100,(int)((sum/n)*100)).ToString("00")+"%";
   }
 
-  // 2) Action : lis l’état mémorisé du SAS (sans WithSas)
+
   SasState S;
   if (sasStates.TryGetValue(NormalizeSasName(sasName), out S) && S != null){
     bool inEmerg = (S.mode==Mode.EmergencyPhase1 || S.mode==Mode.EmergencyPhase2);
 
-    // Contexte global (ne mute rien)
+  
     string _gSrc; EmergencyCause _gCause;
     bool anyGlobalEmerg = ComputeGlobalEmergency(out _gSrc, out _gCause);
 
@@ -2026,8 +2063,8 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
       else                                                  action="URGENCE";
     }
     else if (globalSecure || anyGlobalEmerg){
-      // SAS non concerné localement mais sécurité globale armée
-      // ou urgence ailleurs -> on affiche SÉCURITÉ
+    
+    
       action = "SÉCURITÉ";
     }
     else {
@@ -2036,21 +2073,20 @@ void GetSasSnapshot(string sasName, out string o2str, out string action){
       else                                           action="—";
     }
   } else {
-    // Fallback minimal si pas d’état en mémoire
+  
     bool anyDep = false;
     for (int i=0;i<ventsLocal.Count;i++){ var v=ventsLocal[i]; if (v!=null && v.Depressurize){ anyDep=true; break; } }
     if (ventsLocal.Count>0) action = anyDep ? "DEPRESSURISER" : "PRESSURISER";
   }
 }
 
-// ----- LCD OVERVIEW GLOBAL — multi-SAS sans muter l’état global -----
 void DrawOverviewLCD(){
   if (lcdOverview.Count == 0) return;
 
   const int NAME_W = 22;
   const int O2_W   = 4;
 
-  // Bandeaux globaux
+
   string gSrc; EmergencyCause gCause;
   bool anyGlobalEmerg = ComputeGlobalEmergency(out gSrc, out gCause);
   string secureLine = globalSecure
@@ -2060,13 +2096,13 @@ void DrawOverviewLCD(){
     ? ("URGENCE GLOBALE : ACTIVE — Source: "+gSrc+" — Cause: "+CauseLabel(gCause))
     : "URGENCE GLOBALE : —";
 
-  // A) Tous les SAS
+
   var allSas = new List<string>(DiscoverAllSasNames());
   allSas.Sort(System.StringComparer.OrdinalIgnoreCase);
   var sasSet = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
   for (int i=0;i<allSas.Count;i++) sasSet.Add(NormalizeSasName(allSas[i]));
 
-  // B) Rooms (globales) — filtre celles qui portent exactement un nom de SAS
+
   var rooms = new List<string>(roomToVents.Keys);
   rooms.Sort(System.StringComparer.OrdinalIgnoreCase);
   var filteredRooms = new List<string>();
@@ -2075,7 +2111,7 @@ void DrawOverviewLCD(){
     if (!sasSet.Contains(rn)) filteredRooms.Add(rooms[i]);
   }
 
-  // Rendu
+
   for (int i = 0; i < lcdOverview.Count; i++){
     var s = lcdOverview[i];
     s.ContentType     = VRage.Game.GUI.TextPanel.ContentType.TEXT_AND_IMAGE;
@@ -2091,19 +2127,19 @@ void DrawOverviewLCD(){
     sb.AppendLine(PadL("NOM", NAME_W) + " | " + PadL("%O2", O2_W) + " | ACTION");
     sb.AppendLine(new string('-', NAME_W) + "-+-" + new string('-', O2_W) + "-+---------------");
 
-    // 1) Tous les SAS (SAS 01, SAS 02, ...)
+  
     for (int k=0;k<allSas.Count;k++){
       string name = allSas[k];
       string o2S, actS; GetSasSnapshot(name, out o2S, out actS);
       sb.AppendLine(PadL(NormalizeSasName(name), NAME_W) + " | " + PadR(o2S, O2_W) + " | " + actS);
     }
 
-    // 2) Rooms
+  
     for (int k=0;k<filteredRooms.Count;k++){
       string room = filteredRooms[k];
       string keyN = NormalizeKey(room);
 
-      // O2 room (PROBE prioritaire)
+    
       float o2 = 0f; int n = 0;
       IMyAirVent pv = null; roomPrimaryVent.TryGetValue(room, out pv);
       bool hasProbe = (pv != null && IsProbe(pv));
@@ -2335,6 +2371,7 @@ void EchoStatus(){
   Echo("Mode: "+mode+" | Target: "+envTarget+" | Cause: "+emergencyCause);
   Echo("Rooms: "+roomToVents.Count+"");
   Echo("Contain zones: "+containVents.Count+" active="+containActive.Count);
+  Echo("Sound: normal="+sndNormal.Count+" alarm="+sndAlarm.Count+" | onN="+normalSoundOn+" onA="+alarmSoundOn+" globalA="+globalAlarmOn);
   if (mode==Mode.Pressurizing || mode==Mode.Depressurizing) Echo("Cycle rem.: "+(CYCLE_SECONDS-Elapsed(modeStart)).ToString("0.0")+" s");
   if (mode==Mode.HoldOpenIn || mode==Mode.HoldOpenOut) Echo("Hold rem.: "+(DOOR_HOLD_SECONDS-Elapsed(modeStart)).ToString("0.0")+" s");
   if (mode==Mode.EmergencyPhase1) Echo("Emerg P1 rem.: "+(EMERG_P1_SECONDS-Elapsed(modeStart)).ToString("0.0")+" s");
@@ -2421,7 +2458,7 @@ void UpdateGlobalEmergencySignals() {
   string src; EmergencyCause c;
   bool any = ComputeGlobalEmergency(out src, out c);
 
-  // Snapshot / forçage des vents non-probe en urgence globale
+
   if (any && !globalEmergencyActive) {
     globalVentsBackup.Clear();
     for (int i = 0; i < allVents.Count; i++) {
@@ -2439,29 +2476,41 @@ void UpdateGlobalEmergencySignals() {
     globalEmergencyActive = false;
   }
 
-  bool wantGlobalLeds  = any || (globalSecure && SECURE_USES_GLOBAL_LEDS);
-  bool wantGlobalAlarm = any || (globalSecure && SECURE_USES_GLOBAL_ALARM);
+  bool localEmergencyIsSource = any &&
+    string.Equals(NormalizeSasName(src), NormalizeSasName(SAS_NAME), StringComparison.OrdinalIgnoreCase);
 
-  // LEDs d’urgence globales
+  bool wantGlobalLeds  = any || (globalSecure && SECURE_USES_GLOBAL_LEDS);
+  bool wantGlobalAlarm = !localEmergencyIsSource && (any || (globalSecure && SECURE_USES_GLOBAL_ALARM));
+  string globalAlarmSound = globalSecure ? SOUND_SECURE_ALARM : SOUND_GLOBAL_ALARM;
+  float globalAlarmLoop = globalSecure ? SECURE_LOOP_PERIOD : ALARM_LOOP_PERIOD;
+  double globalAlarmKick = globalSecure ? SECURE_KICK_PERIOD : ALARM_KICK_PERIOD;
+
+
   if (wantGlobalLeds) EmergencyLedsBlinkRedDim(ledsEmergency);
   else                EmergencyLedsSolidWhiteRestore(ledsEmergency);
 
-  // LEDs des zones de confinement suivent l’état global
+
   foreach (var kv in containLights) {
     if (wantGlobalLeds) SetLedsBlinkOnGroup(kv.Value, Red(), 0.5f, 60f);
     else                SetLedsOffGroup(kv.Value);
   }
 
-  // Sirène globale (groupe AIRLOCK_ALARM)
-  SoundGroupUpdate(
-    sndAlarm,                 // => Sound Blocks du groupe AIRLOCK_ALARM
-    wantGlobalAlarm,          // => on sonne si urgence ou secure (selon options)
-    DEFAULT_SOUND_ALARM,      // "Alarm 1" par défaut
-    ALARM_LOOP_PERIOD,        // 1.0f
-    ALARM_KICK_PERIOD,        // 1.0
-    ref globalAlarmOn,
-    ref globalAlarmLastKick
-  );
+
+
+  if (!localEmergencyIsSource) {
+    var globalSoundBlocks = (sndAlarm.Count > 0) ? sndAlarm : sndNormal;
+    SoundGroupUpdate(
+      globalSoundBlocks,
+      wantGlobalAlarm,         
+      globalAlarmSound,
+      globalAlarmLoop,
+      globalAlarmKick,
+      ref globalAlarmOn,
+      ref globalAlarmLastKick
+    );
+  } else {
+    globalAlarmOn = false;
+  }
 }
 
 HashSet<long> allProbeVentIds = new HashSet<long>();

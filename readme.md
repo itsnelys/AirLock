@@ -25,9 +25,13 @@ Le système s'initialise en scannant les groupes de blocs définis dans les cons
 | `AIRLOCK_DOORS_IN` | Portes menant à l'intérieur de la base. |
 | `AIRLOCK_DOORS_OUT` | Portes menant à l'extérieur ou au hangar. |
 | `AIRLOCK_LCD` | Écrans d'affichage du statut local. |
+| `AIRLOCK_SOUND` | Sound blocks du SAS : cycle normal et repli sonore si `AIRLOCK_ALARM` est absent. |
+| `AIRLOCK_ALARM` | Sound blocks d'alarme globale / secure, prioritaire si le groupe existe. |
+| `AIRLOCK_EMERGENCY_LEDS` | Lumières d'alerte globale et mode secure. |
 
 * **Tagging :** Utilisez le format `[SAS:NomDuSas]` dans le nom des blocs pour les assigner à un SAS spécifique.
 * **Sondes :** Le tag `[PROBE]` sur un évent permet une lecture précise de l'O2 sans affecter la pressurisation.
+* **Sons :** Les sound blocks n'ont pas besoin d'être configurés à la main ; le script force le son et la durée de boucle selon l'état courant.
 
 ---
 
@@ -48,7 +52,7 @@ Le cœur sécuritaire du système repose sur la surveillance constante des secte
 
 * **Détection de Fuite :** Si le niveau d'O2 chute anormalement (seuil par défaut `20%`), le secteur passe en mode confinement.
 * **Confinement (Containment) :** Verrouille les portes du secteur, coupe la ventilation non essentielle et active les alarmes visuelles (LED rouges clignotantes).
-* **Mode Secure :** Une commande globale qui verrouille tous les SAS de la grille, idéal pour les situations de combat ou d'alerte intrusion.
+* **Mode Secure :** Une commande globale qui verrouille tous les SAS de la grille, idéal pour les situations de combat ou d'alerte intrusion. Le son `Drone Large` est forcé avec une boucle de `2s` sur `AIRLOCK_ALARM`, ou sur `AIRLOCK_SOUND` si aucun groupe d'alarme n'est disponible.
 
 ---
 
