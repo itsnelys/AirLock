@@ -1,288 +1,300 @@
-# Space Engineers Airlock System - Script Documentation
+# Space Engineers Airlock / SAS Controller
 
-This *Space Engineers* programmable block script implements an **intelligent multi-airlock controller**. It manages airlock cycling, door interlocks, oxygen leak detection, room containment, secure lockdown, local LCDs, global overview displays, lights, and sound alarms.
+## FR
+
+Script de Programmable Block pour *Space Engineers* qui gere un ou plusieurs SAS intelligents.
+
+Il controle les cycles pressurisation/depressurisation, les interverrouillages de portes, les urgences, le mode securise, les fuites O2, le confinement des pieces, les LCD, les lumieres et les alarmes.
+
+### Installation
+
+1. Place un `Programmable Block`.
+2. Copie `Script_Airlock.cs` dans le Programmable Block.
+3. Cree les groupes de blocs indiques ci-dessous.
+4. Ajoute des tags `[SAS:Nom]` si plusieurs SAS sont geres par le meme script.
+5. Ajoute des tags `[ROOM:Nom]` si tu veux surveiller des pieces.
+6. Compile et lance le script.
+
+### Groupes principaux
+
+| Groupe | Blocs | Description |
+| --- | --- | --- |
+| `AIRLOCK_VENTS` | Vents | Vents qui pressurisent ou depressurisent le SAS. |
+| `AIRLOCK_DOORS_IN` | Portes | Portes cote interieur pressurise. |
+| `AIRLOCK_DOORS_OUT` | Portes | Portes cote exterieur, hangar ou vide. |
+| `AIRLOCK_LCD` | LCD / ecrans | Affichage local du SAS. |
+| `AIRLOCK_LEDS` | Lumieres | Indicateurs locaux. |
+| `AIRLOCK_SOUND` | Sound blocks | Son de cycle normal, fallback d'alarme locale. |
+| `AIRLOCK_SAS_PROBE` | Vents | Sondes O2 optionnelles, jamais utilisees pour cycler. |
+| `AIRLOCK_ALARM` | Sound blocks | Alarmes globales et mode securise. |
+| `AIRLOCK_EMERGENCY_LEDS` | Lumieres | Lumieres globales d'urgence/securite. |
+| `AUTOCLOSE_DOORS` | Portes | Portes optionnelles fermees automatiquement. |
+| `VENTS_OVERVIEW_LCD` | LCD / ecrans | Vue globale des SAS et pieces. |
+| `ROOM_STATUS_LCD` | LCD / ecrans | Statut des pieces surveillees. |
+| `CONTAIN_<ROOM>` | Portes, vents, lumieres, sons | Zone de confinement d'une piece. |
+
+### Tags
+
+| Tag / Regle | Utilisation | Description |
+| --- | --- | --- |
+| `[SAS:Nom]` | Portes, vents, LCD, lumieres, sons | Assigne un bloc a un SAS precis. |
+| `[ROOM:Nom]` | Vents, lumieres, LCD | Assigne un bloc a une piece surveillee. |
+| `[PROBE]` | Vents | Marque une sonde O2 en lecture seule. |
+| `CONTAIN_<ROOM>` | Nom de groupe | Definit les blocs d'une zone de confinement. |
+
+Exemples : `[SAS:SAS 01]`, `[SAS:Hangar]`, `[ROOM:Medbay]`, `CONTAIN_Medbay`.
+
+Si le Programmable Block porte un tag `[SAS:...]`, ce SAS devient la cible par defaut des commandes sans nom.
+
+### Reglages importants
+
+| Reglage | Valeur par defaut | Description |
+| --- | --- | --- |
+| `O2_PRESSURIZED` | `0.95f` | Niveau O2 considere pressurise. |
+| `O2_DEPRESSURIZED` | `0.05f` | Niveau O2 considere depressurise. |
+| `LEAK_O2_THRESHOLD` | `0.20f` | Seuil de fuite O2 pour un SAS. |
+| `ROOM_LEAK_THRESHOLD` | `0.20f` | Seuil de fuite O2 pour une piece. |
+| `ROOM_RELEASE_O2` | `0.25f` | O2 requis avant liberation d'un confinement auto. |
+| `DOOR_MIN_HEALTH` | `0.60f` | Integrite minimum d'une porte avant urgence. |
+| `CYCLE_SECONDS` | `10.0` | Duree d'un cycle de pression. |
+| `AUTOCLOSE_SECONDS` | `8.0` | Delai de fermeture automatique des portes surveillees. |
+| `DOOR_HOLD_SECONDS` | `30.0` | Temps d'ouverture de la porte de destination. |
+| `LIMIT_TO_CONSTRUCT` | `true` | Ignore les blocs d'autres constructs. |
+
+### Cycle SAS
+
+| Commande | Mode des vents | Porte ouverte apres cycle |
+| --- | --- | --- |
+| `pressu` / `pressurize` | Pressurise | `AIRLOCK_DOORS_IN` |
+| `depressu` / `depressurize` | Depressurise | `AIRLOCK_DOORS_OUT` |
+
+Pendant un cycle, les deux cotes sont fermes et verrouilles. Le script evite l'ouverture simultanee des portes interieures et exterieures.
+
+### Urgence et securite
+
+Le script declenche ou gere :
+
+- urgence manuelle avec `urgence` ou `emergency` ;
+- fuite O2 sous `LEAK_O2_THRESHOLD` ;
+- porte endommagee sous `DOOR_MIN_HEALTH` ;
+- verrouillage des autres SAS si un SAS entre en urgence ;
+- mode securise global avec `secure`, `secure on`, `secure off`, `securite` ou `confinement`.
+
+Le mode securise ferme et verrouille les SAS, coupe les vents non-sondes, active les lumieres d'urgence et joue l'alarme globale.
+
+### Confinement des pieces
+
+Les pieces peuvent etre surveillees avec `[ROOM:Nom]` sur les vents, lumieres et LCD. Un groupe `CONTAIN_<ROOM>` definit les portes, vents, lumieres et sons a controler pendant un confinement.
+
+| Commande | Action |
+| --- | --- |
+| `contain <room>` | Active ou libere le confinement apres le delai de protocole. |
+| `contain_<room>` | Format alternatif. |
+| `suspend <room>` | Deverrouille temporairement les portes de confinement. |
+
+Le confinement automatique se declenche si l'O2 reste sous le seuil apres test. La liberation automatique attend que l'O2 remonte au-dessus de `ROOM_RELEASE_O2`.
+
+### LCD
+
+Le script peut afficher :
+
+- etat local du SAS ;
+- progression des cycles ;
+- niveau O2 ;
+- etat des portes ;
+- mode securise ou urgence ;
+- vue globale de tous les SAS ;
+- statut des pieces et confinements.
+
+### Commandes
+
+| Commande | Action |
+| --- | --- |
+| `pressu` | Pressurise le SAS cible. |
+| `pressurize` | Alias de `pressu`. |
+| `depressu` | Depressurise le SAS cible. |
+| `depressurize` | Alias de `depressu`. |
+| `urgence` | Declenche une urgence locale. |
+| `emergency` | Alias de `urgence`. |
+| `scan` | Affiche les informations de detection. |
+| `secure` | Bascule le mode securise global. |
+| `secure on` | Active le mode securise global. |
+| `secure off` | Desactive le mode securise global. |
+| `securite` | Alias francais de `secure`. |
+| `confinement` | Alias de securite globale. |
+
+Commandes ciblees possibles : `pressu SAS 01`, `depressu SAS 02`, `urgence Hangar`, `scan SAS 03`.
+
+### Depannage
+
+| Probleme | Solution |
+| --- | --- |
+| Aucun bloc de SAS detecte | Verifie les groupes et les tags `[SAS:...]`. |
+| La commande agit sur le mauvais SAS | Ajoute `[SAS:Nom]` au Programmable Block ou indique le nom dans la commande. |
+| Les portes ne s'ouvrent pas | Verifie les groupes de portes, leur etat, et les modes urgence/securite. |
+| Les vents ne cyclent pas | Verifie `AIRLOCK_VENTS` et assure-toi que les vents ne sont pas `[PROBE]`. |
+| Les lectures O2 semblent fausses | Ajoute une sonde dans `AIRLOCK_SAS_PROBE` avec `[PROBE]`. |
+| Le mode securise n'a pas de son | Ajoute des sound blocks dans `AIRLOCK_ALARM` ou `AIRLOCK_SOUND`. |
+| Le LCD global est vide | Ajoute un ecran dans `VENTS_OVERVIEW_LCD`. |
+| Le confinement ne part pas | Verifie les tags `[ROOM:Nom]` et le groupe `CONTAIN_<ROOM>`. |
+
+### Note de patch 0.1
+
+- Premiere version stable documentee.
+- Gestion multi-SAS avec tags `[SAS:...]`.
+- Cycles pressurisation/depressurisation avec interverrouillage des portes.
+- Urgences locales, urgence globale et mode securise.
+- Surveillance O2 et confinement automatique des pieces.
+- Support LCD local, LCD global, lumieres et alarmes.
 
 ---
 
-## Table of Contents
+## EN
 
-* [Initialization and Configuration](#initialization-and-configuration)
-* [Airlock Cycling Logic](#airlock-cycling-logic)
-* [Emergency and Secure Protocols](#emergency-and-secure-protocols)
-* [Room Containment System](#room-containment-system)
-* [LCD Display Logic](#lcd-display-logic)
-* [Terminal Commands](#terminal-commands)
-* [Troubleshooting](#troubleshooting)
+*Space Engineers* Programmable Block script that manages one or more intelligent airlocks.
 
----
+It controls pressurization/depressurization cycles, door interlocks, emergencies, secure mode, O2 leak detection, room containment, LCDs, lights, and alarms.
 
-## Initialization and Configuration
+### Installation
 
-The script scans named block groups and block tags on the same construct as the programmable block. Each airlock can be separated by a `[SAS:...]` tag, allowing multiple airlocks to run from the same script while keeping their own doors, vents, sounds, lights, and state.
+1. Place a `Programmable Block`.
+2. Copy `Script_Airlock.cs` into the Programmable Block.
+3. Create the block groups listed below.
+4. Add `[SAS:Name]` tags if several airlocks are handled by the same script.
+5. Add `[ROOM:Name]` tags if you want room monitoring.
+6. Compile and run the script.
 
-### **Script Constants**
-| Constant | Default Value | Description |
-| --- | --- | --- |
-| `VENTS_GROUP` | `AIRLOCK_VENTS` | Air vents used by the active airlock. |
-| `DOORS_IN_GROUP` | `AIRLOCK_DOORS_IN` | Doors leading to the pressurized interior side. |
-| `DOORS_OUT_GROUP` | `AIRLOCK_DOORS_OUT` | Doors leading to the exterior or hangar side. |
-| `LCD_GROUP` | `AIRLOCK_LCD` | Local LCDs for each airlock. |
-| `LEDS_GROUP` | `AIRLOCK_LEDS` | Local indicator lights for each airlock. |
-| `SOUND_NORMAL_GROUP` | `AIRLOCK_SOUND` | Local cycle sound blocks and fallback alarm sound blocks. |
-| `PROBE_VENTS_GROUP` | `AIRLOCK_SAS_PROBE` | Probe vents used for reliable oxygen readings. |
-| `EMERGENCY_LEDS_GROUP` | `AIRLOCK_EMERGENCY_LEDS` | Global emergency / secure mode lights. |
-| `SOUND_ALARM_GROUP` | `AIRLOCK_ALARM` | Global alarm / secure mode sound blocks. |
-| `AUTOCLOSE_DOORS_GROUP` | `AUTOCLOSE_DOORS` | Extra doors watched by the auto-close system. |
-| `OVERVIEW_LCD_GROUP` | `VENTS_OVERVIEW_LCD` | Global overview LCDs for all airlocks and rooms. |
-| `CONTAIN_GROUP_PREFIX` | `CONTAIN_` | Prefix for room containment groups. |
-| `ROOM_LCD_GROUP` | `ROOM_STATUS_LCD` | LCD group for room status displays. |
-| `SAS_TAG_PREFIX` | `[SAS:` | Tag used to assign blocks to a specific airlock. |
-| `ROOM_TAG_PREFIX` | `[ROOM:` | Tag used to assign vents, lights, and LCDs to a room. |
-| `PROBE_TAG` | `[PROBE]` | Tag used to identify probe vents. |
+### Main Groups
 
-### **Timing and Threshold Constants**
-| Constant | Default Value | Description |
-| --- | --- | --- |
-| `O2_PRESSURIZED` | `0.95f` | Oxygen level considered pressurized. |
-| `O2_DEPRESSURIZED` | `0.05f` | Oxygen level considered depressurized. |
-| `LEAK_O2_THRESHOLD` | `0.20f` | Airlock leak threshold. |
-| `ROOM_LEAK_THRESHOLD` | `0.20f` | Room leak threshold. |
-| `ROOM_RELEASE_O2` | `0.25f` | O2 level required before an auto-contained room can be released. |
-| `DOOR_MIN_HEALTH` | `0.60f` | Minimum door integrity before triggering an emergency. |
-| `CYCLE_SECONDS` | `10.0` | Duration of a pressurization or depressurization cycle. |
-| `AUTOCLOSE_SECONDS` | `8.0` | Time before monitored open doors are closed automatically. |
-| `DOOR_HOLD_SECONDS` | `30.0` | Time the destination-side door remains open after a cycle. |
-| `EMERG_P1_SECONDS` | `30.0` | Emergency phase 1 duration. |
-| `EMERG_P2_SECONDS` | `5.0` | Emergency phase 2 duration. |
-| `ROOM_TEST_DURATION` | `10.0` | Room pressurization test duration. |
-| `ROOM_RETEST_PERIOD` | `60.0` | Delay before an auto-contained room can be retested. |
-| `DOOR_TEMP_UNLOCK_SECONDS` | `8.0` | Temporary containment door unlock duration. |
-| `MANUAL_CONTAIN_PROTO_SECONDS` | `10.0` | Delay before manual containment changes are applied. |
-
-### **Sound Constants**
-| Constant | Default Value | Description |
-| --- | --- | --- |
-| `SOUND_PRESSURE_CYCLE` | `Alert 3` | Normal pressurization / depressurization cycle sound. |
-| `SOUND_GLOBAL_ALARM` | `Alert 2` | Global alarm sound outside secure mode. |
-| `SOUND_LOCAL_ALARM` | `Alert 1` | Local airlock emergency sound. |
-| `SOUND_SECURE_ALARM` | `Drone Large` | Secure mode sound. |
-| `DEFAULT_ROOM_ALERT_SOUND` | `Alert 1` | Room containment alert sound. |
-| `NORMAL_LOOP_PERIOD` | `1.0f` | Default normal cycle sound loop duration. |
-| `ALARM_LOOP_PERIOD` | `1.0f` | Default alarm loop duration. |
-| `SECURE_LOOP_PERIOD` | `2.0f` | Secure mode sound loop duration. |
-
-### **Required Block Groups**
-| Group Name | Blocks Inside | Description |
+| Group | Blocks | Description |
 | --- | --- | --- |
 | `AIRLOCK_VENTS` | Air vents | Vents used to pressurize or depressurize the airlock. |
-| `AIRLOCK_DOORS_IN` | Doors | Interior-side airlock doors. |
-| `AIRLOCK_DOORS_OUT` | Doors | Exterior-side or hangar-side airlock doors. |
-| `AIRLOCK_LCD` | LCD panels or display-capable blocks | Local airlock status screens. |
-| `AIRLOCK_LEDS` | Interior lights | Local status lights. |
-| `AIRLOCK_SOUND` | Sound blocks | Normal cycle sound; also used as fallback if `AIRLOCK_ALARM` is missing. |
-| `AIRLOCK_SAS_PROBE` | Air vents | Optional dedicated O2 probes. These are never used for cycling. |
-| `AIRLOCK_ALARM` | Sound blocks | Global and secure alarm sound blocks. |
-| `AIRLOCK_EMERGENCY_LEDS` | Interior lights | Global emergency and secure mode lights. |
-| `AUTOCLOSE_DOORS` | Doors | Optional doors closed automatically after `AUTOCLOSE_SECONDS`. |
-| `VENTS_OVERVIEW_LCD` | LCD panels or display-capable blocks | Optional global overview screen. |
-| `ROOM_STATUS_LCD` | LCD panels or display-capable blocks | Optional room status displays, matched by `[ROOM:...]`. |
-| `CONTAIN_<ROOM>` | Doors, vents, lights, sound blocks | Optional containment group for a room. |
+| `AIRLOCK_DOORS_IN` | Doors | Doors leading to the pressurized interior side. |
+| `AIRLOCK_DOORS_OUT` | Doors | Doors leading outside, to a hangar, or to vacuum. |
+| `AIRLOCK_LCD` | LCDs / screens | Local airlock display. |
+| `AIRLOCK_LEDS` | Lights | Local indicators. |
+| `AIRLOCK_SOUND` | Sound blocks | Normal cycle sound, local alarm fallback. |
+| `AIRLOCK_SAS_PROBE` | Air vents | Optional O2 probes, never used for cycling. |
+| `AIRLOCK_ALARM` | Sound blocks | Global alarm and secure mode sounds. |
+| `AIRLOCK_EMERGENCY_LEDS` | Lights | Global emergency/secure lights. |
+| `AUTOCLOSE_DOORS` | Doors | Optional automatically closed doors. |
+| `VENTS_OVERVIEW_LCD` | LCDs / screens | Global overview for airlocks and rooms. |
+| `ROOM_STATUS_LCD` | LCDs / screens | Room status displays. |
+| `CONTAIN_<ROOM>` | Doors, vents, lights, sounds | Room containment zone. |
 
-### **Tagging Rules**
-| Tag / Naming Rule | Used On | Description |
+### Tags
+
+| Tag / Rule | Used On | Description |
 | --- | --- | --- |
-| `[SAS:Name]` | Airlock doors, vents, LCDs, lights, sound blocks | Assigns the block to a specific airlock. Example: `[SAS:SAS 01]`. |
-| `[ROOM:Name]` | Room vents, lights, room LCDs | Assigns the block to a monitored room. Example: `[ROOM:Medbay]`. |
-| `[PROBE]` | Air vents | Marks a vent as a read-only oxygen probe. |
-| `CONTAIN_<ROOM>` | Block group name | Defines which doors, vents, lights, and sound blocks belong to a containment zone. |
+| `[SAS:Name]` | Doors, vents, LCDs, lights, sounds | Assigns a block to a specific airlock. |
+| `[ROOM:Name]` | Vents, lights, LCDs | Assigns a block to a monitored room. |
+| `[PROBE]` | Air vents | Marks a read-only O2 probe. |
+| `CONTAIN_<ROOM>` | Group name | Defines the blocks of a containment zone. |
 
-* **Multiple airlocks:** Put all airlock blocks in the same group names, then separate each airlock with `[SAS:...]` tags.
-* **Default airlock:** If the programmable block itself has a `[SAS:...]` tag, that airlock becomes the default target for commands without an explicit SAS name.
-* **Same construct only:** With `LIMIT_TO_CONSTRUCT = true`, the script ignores blocks on other connected constructs.
-* **No manual sound setup:** Sound blocks do not need to be preconfigured; the script selects the sound and loop period automatically.
+Examples: `[SAS:SAS 01]`, `[SAS:Hangar]`, `[ROOM:Medbay]`, `CONTAIN_Medbay`.
 
----
+If the Programmable Block has a `[SAS:...]` tag, that airlock becomes the default target for commands without a name.
 
-## Airlock Cycling Logic
+### Important Settings
 
-The script automates movement between pressurized and depressurized environments while preventing both sides from opening at the same time.
+| Setting | Default Value | Description |
+| --- | --- | --- |
+| `O2_PRESSURIZED` | `0.95f` | O2 level considered pressurized. |
+| `O2_DEPRESSURIZED` | `0.05f` | O2 level considered depressurized. |
+| `LEAK_O2_THRESHOLD` | `0.20f` | Airlock O2 leak threshold. |
+| `ROOM_LEAK_THRESHOLD` | `0.20f` | Room O2 leak threshold. |
+| `ROOM_RELEASE_O2` | `0.25f` | O2 required before auto-containment release. |
+| `DOOR_MIN_HEALTH` | `0.60f` | Minimum door integrity before emergency. |
+| `CYCLE_SECONDS` | `10.0` | Duration of a pressure cycle. |
+| `AUTOCLOSE_SECONDS` | `8.0` | Delay before monitored doors auto-close. |
+| `DOOR_HOLD_SECONDS` | `30.0` | Destination door hold-open time. |
+| `LIMIT_TO_CONSTRUCT` | `true` | Ignores blocks on other constructs. |
 
-### **Operating Logic**
-1.  **Command:** A `pressu` or `depressu` command starts the requested cycle.
-2.  **Pre-lock:** Both door groups are enabled, ordered closed, and checked.
-3.  **Interlock:** Once all doors are closed, both sides are disabled to prevent manual opening.
-4.  **Vent control:** Vents are set to pressurize or depressurize for `CYCLE_SECONDS`.
-5.  **Access:** The destination-side door opens for `DOOR_HOLD_SECONDS`.
-6.  **Recovery:** The door is closed, normal interlocks are restored, and the airlock returns to idle.
+### Airlock Cycle
 
-### **Door Direction**
 | Command | Vent Mode | Door Opened After Cycle |
 | --- | --- | --- |
-| `pressu` | Pressurize | `AIRLOCK_DOORS_IN` |
-| `depressu` | Depressurize | `AIRLOCK_DOORS_OUT` |
+| `pressu` / `pressurize` | Pressurize | `AIRLOCK_DOORS_IN` |
+| `depressu` / `depressurize` | Depressurize | `AIRLOCK_DOORS_OUT` |
 
-### **Interlock Behavior**
-* Interior doors stay disabled while the airlock is depressurized.
-* Exterior doors stay disabled while the airlock is pressurized.
-* During active cycling, both door groups are closed and disabled.
-* If secure mode or a remote emergency is active, normal cycling is blocked.
+During a cycle, both sides are closed and locked. The script prevents the interior and exterior doors from opening at the same time.
 
----
+### Emergency and Secure Mode
 
-## Emergency and Secure Protocols
+The script handles:
 
-The script can enter local emergency, global emergency, or secure mode depending on the situation.
+- manual emergency with `urgence` or `emergency`;
+- O2 leak below `LEAK_O2_THRESHOLD`;
+- damaged door below `DOOR_MIN_HEALTH`;
+- remote locking of other airlocks when one airlock is in emergency;
+- global secure mode with `secure`, `secure on`, `secure off`, `securite`, or `confinement`.
 
-### **Emergency Triggers**
-| Trigger | Result |
-| --- | --- |
-| Manual `urgence` / `emergency` command | Starts a local emergency on the target airlock. |
-| O2 leak below `LEAK_O2_THRESHOLD` | Starts a local O2 leak emergency. |
-| Door integrity below `DOOR_MIN_HEALTH` | Starts a local door damage emergency. |
-| Another airlock in emergency | Locks non-source airlocks through remote emergency handling. |
+Secure mode closes and locks airlocks, turns off non-probe vents, enables emergency lights, and plays the global alarm.
 
-### **Emergency Phases**
-1.  **Phase 1 (`EMERG_P1_SECONDS`):** Doors are closed, non-probe vents are shut down, local alarm and red lights are enabled.
-2.  **Phase 2 (`EMERG_P2_SECONDS`):** The system keeps doors secured and prepares recovery.
-3.  **Restore:** If `RESTORE_AFTER_EMERG` is enabled, vents and interlocks are restored when safe.
+### Room Containment
 
-### **Secure Mode**
-Secure mode is a global lockdown intended for combat, intrusion, or full-grid safety situations.
+Rooms can be monitored with `[ROOM:Name]` on vents, lights, and LCDs. A `CONTAIN_<ROOM>` group defines the doors, vents, lights, and sounds controlled during containment.
 
-* Locks all discovered airlocks.
-* Closes and hard-locks airlock doors.
-* Turns off non-probe vents globally.
-* Uses global emergency LEDs if `SECURE_USES_GLOBAL_LEDS = true`.
-* Uses global alarm sound if `SECURE_USES_GLOBAL_ALARM = true`.
-* Forces `Drone Large` with a `2s` loop on `AIRLOCK_ALARM`.
-* Falls back to `AIRLOCK_SOUND` if the `AIRLOCK_ALARM` group is missing or empty.
-
----
-
-## Room Containment System
-
-Rooms can be monitored independently from the airlocks. This allows the script to isolate a leaking room without shutting down the whole base.
-
-### **Room Detection**
-| Setup | Description |
-| --- | --- |
-| `[ROOM:Name]` on vents | Adds those vents to a monitored room. |
-| `[ROOM:Name]` on lights | Adds those lights to room alarm feedback. |
-| `[ROOM:Name]` on LCDs in `ROOM_STATUS_LCD` | Creates room-specific status displays. |
-| `CONTAIN_<ROOM>` group | Defines doors, vents, lights, and sounds controlled during containment. |
-
-### **Containment Logic**
-1.  **Monitor:** The script reads room O2 from a `[PROBE]` vent first, or from normal vents if no probe exists.
-2.  **Test:** If O2 drops below `ROOM_TEST_TRIGGER`, the room can run a pressurization test for `ROOM_TEST_DURATION`.
-3.  **Contain:** If O2 remains below `ROOM_LEAK_THRESHOLD`, the room is isolated.
-4.  **Lockdown:** Containment doors close, non-probe vents stop, lights blink red, and room sound blocks play `Alert 1`.
-5.  **Release:** When O2 is above `ROOM_RELEASE_O2`, the script waits `RELEASE_DELAY_ON_RECOVER` before releasing auto-containment.
-
-### **Manual Containment**
-Manual containment changes use a protocol delay to prevent accidental toggles.
-
-| Action | Behavior |
-| --- | --- |
-| `contain <room>` when inactive | Schedules containment activation after `MANUAL_CONTAIN_PROTO_SECONDS`. |
-| `contain <room>` when active | Schedules containment release after `MANUAL_CONTAIN_PROTO_SECONDS`. |
-| `suspend <room>` | Temporarily unlocks containment doors for `DOOR_TEMP_UNLOCK_SECONDS`. |
-
----
-
-## LCD Display Logic
-
-The script writes status information to three display categories: local airlock LCDs, global overview LCDs, and room LCDs.
-
-### **Local Airlock LCD (`AIRLOCK_LCD`)**
-Displayed information includes:
-* **Secure state:** Active, armed, or disabled.
-* **Emergency state:** Local or global emergency source and cause.
-* **Mode:** Idle, pressurizing, depressurizing, opening, closing, or emergency phase.
-* **Progress:** Countdown and progress bar during cycles, door hold, and emergency phases.
-* **O2 status:** Internal oxygen percentage.
-* **Door state:** Interior and exterior door status.
-
-### **Global Overview LCD (`VENTS_OVERVIEW_LCD`)**
-Displayed information includes:
-* **Global secure status.**
-* **Global emergency status and source airlock.**
-* **All discovered airlocks with O2 and current action.**
-* **Monitored rooms with O2, containment state, tests, and ventilation state.**
-
-### **Room Status LCD (`ROOM_STATUS_LCD`)**
-Displayed information includes:
-* **Room name.**
-* **Containment status.**
-* **O2 percentage.**
-* **Manual protocol countdown.**
-* **Pressurization test countdown.**
-* **Temporary unlock countdown.**
-* **Auto-release countdown.**
-* **Next auto-test delay when applicable.**
-
-The script automatically sets LCDs to text display mode and writes compact dashboard-style text.
-
----
-
-## Terminal Commands
-
-The script accepts commands through the programmable block argument field.
-
-### **Airlock Commands**
 | Command | Action |
 | --- | --- |
-| `pressu` | Starts pressurization on the default airlock. |
-| `pressurize` | Same as `pressu`. |
-| `depressu` | Starts depressurization on the default airlock. |
-| `depressurize` | Same as `depressu`. |
-| `urgence` | Starts a manual emergency on the target airlock. |
-| `emergency` | Same as `urgence`. |
-| `scan` | Prints debug information about the current airlock block scan. |
+| `contain <room>` | Activates or releases containment after the protocol delay. |
+| `contain_<room>` | Alternate format. |
+| `suspend <room>` | Temporarily unlocks containment doors. |
 
-### **Global Commands**
+Automatic containment starts if O2 remains below the threshold after testing. Automatic release waits until O2 rises above `ROOM_RELEASE_O2`.
+
+### LCD
+
+The script can display:
+
+- local airlock state;
+- cycle progress;
+- O2 level;
+- door state;
+- secure or emergency state;
+- global overview of all airlocks;
+- room and containment status.
+
+### Commands
+
 | Command | Action |
 | --- | --- |
+| `pressu` | Pressurizes the target airlock. |
+| `pressurize` | Alias for `pressu`. |
+| `depressu` | Depressurizes the target airlock. |
+| `depressurize` | Alias for `depressu`. |
+| `urgence` | Starts a local emergency. |
+| `emergency` | Alias for `urgence`. |
+| `scan` | Prints detection information. |
 | `secure` | Toggles global secure mode. |
 | `secure on` | Enables global secure mode. |
 | `secure off` | Disables global secure mode. |
 | `securite` | French alias for `secure`. |
-| `confinement` | Alias for global secure mode. |
+| `confinement` | Global secure alias. |
 
-### **Containment Commands**
-| Command | Action |
-| --- | --- |
-| `contain <room>` | Toggles manual containment for a room after the protocol delay. |
-| `contain_<room>` | Alternate containment command format. |
-| `suspend <room>` | Temporarily unlocks containment doors for that room. |
+Targeted command examples: `pressu SAS 01`, `depressu SAS 02`, `urgence Hangar`, `scan SAS 03`.
 
-### **Targeting a Specific Airlock**
-Commands can include a SAS name so they run against a specific airlock instead of the default one.
-
-Examples:
-* `pressu SAS 01`
-* `depressu SAS 02`
-* `urgence SAS Hangar`
-* `scan SAS 03`
-
----
-
-## Troubleshooting
+### Troubleshooting
 
 | Problem | Fix |
 | --- | --- |
-| The script finds no airlock blocks | Check that the block is in the right group and has the correct `[SAS:...]` tag. |
-| A command affects the wrong airlock | Add `[SAS:Name]` to the programmable block or include the SAS name in the command. |
-| Doors do not open after a cycle | Check that both door groups exist, the doors are functional, and secure/emergency mode is not active. |
-| Vents do not cycle | Check `AIRLOCK_VENTS`, make sure the vents are not tagged as `[PROBE]`, and verify they are on the same construct. |
-| O2 readings look wrong | Add a dedicated vent to `AIRLOCK_SAS_PROBE` and tag it with `[PROBE]`. |
-| Secure mode has no sound | Add sound blocks to `AIRLOCK_ALARM`, or ensure `AIRLOCK_SOUND` contains fallback sound blocks. |
-| Secure mode sound loops too quickly or slowly | Check `SECURE_LOOP_PERIOD`; the default is `2.0f` for `Drone Large`. |
-| Normal cycle sound is missing | Add sound blocks to `AIRLOCK_SOUND`. The script will select `Alert 3` automatically. |
-| Global overview is blank | Add an LCD or display-capable block to `VENTS_OVERVIEW_LCD`. |
-| Room LCD is blank | Add the display to `ROOM_STATUS_LCD` and include a matching `[ROOM:Name]` tag. |
-| Room containment does not trigger | Check `[ROOM:Name]` vent tags and create a matching `CONTAIN_<ROOM>` group. |
-| Containment doors reopen immediately | Check for `suspend <room>` state or wait for `DOOR_TEMP_UNLOCK_SECONDS` to expire. |
-| Blocks on another grid are ignored | This is expected when `LIMIT_TO_CONSTRUCT = true`. |
+| No airlock blocks are detected | Check groups and `[SAS:...]` tags. |
+| Command affects the wrong airlock | Add `[SAS:Name]` to the Programmable Block or include the name in the command. |
+| Doors do not open | Check door groups, door condition, and emergency/secure modes. |
+| Vents do not cycle | Check `AIRLOCK_VENTS` and make sure cycle vents are not `[PROBE]`. |
+| O2 readings look wrong | Add a probe in `AIRLOCK_SAS_PROBE` with `[PROBE]`. |
+| Secure mode has no sound | Add sound blocks to `AIRLOCK_ALARM` or `AIRLOCK_SOUND`. |
+| Global LCD is blank | Add a screen to `VENTS_OVERVIEW_LCD`. |
+| Containment does not trigger | Check `[ROOM:Name]` tags and the `CONTAIN_<ROOM>` group. |
+
+### Patch Note 0.1
+
+- First documented stable release.
+- Multi-airlock support with `[SAS:...]` tags.
+- Pressurization/depressurization cycles with door interlocks.
+- Local emergencies, global emergency handling, and secure mode.
+- O2 monitoring and automatic room containment.
+- Support for local LCDs, global LCDs, lights, and alarms.
 
 ---
 
